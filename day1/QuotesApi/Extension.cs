@@ -13,6 +13,7 @@ public static class Extensions
         
         // Requirement: DI with IQuoteRepository scoped
         services.AddScoped<IQuoteRepository, QuoteRepository>();
+        services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddProblemDetails();
 
         return services;
@@ -58,6 +59,78 @@ public static class Extensions
         {
             var deleted = await repo.DeleteAsync(id, ct);
             return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
+        return app;
+    }
+
+    public static IEndpointRouteBuilder MapCollectionEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/collections");
+
+        // GET /api/collections/{id}
+        group.MapGet("/{id:int}", async (int id, ICollectionRepository repo, CancellationToken ct) =>
+        {
+            var collection = await repo.GetByIdAsync(id, ct);
+            return collection is not null ? Results.Ok(collection) : Results.NotFound();
+        });
+
+        // POST /api/collections
+        group.MapPost("/", async (CreateCollectionRequest req, ICollectionRepository repo, CancellationToken ct) =>
+        {
+            Collection collection;
+            try
+            {
+                // All invariant checking (name length, etc.) lives on the aggregate itself.
+                collection = Collection.Create(req.Name, req.OwnerId);
+            }
+            catch (DomainException ex)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(req.Name)] = [ex.Message] });
+            }
+
+            var created = await repo.AddAsync(collection, ct);
+            return Results.Created($"/api/collections/{created.Id}", created);
+        });
+
+        // POST /api/collections/{id}/items
+        group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, ICollectionRepository repo, CancellationToken ct) =>
+        {
+            var collection = await repo.GetByIdAsync(id, ct);
+            if (collection is null) return Results.NotFound();
+
+            try
+            {
+                // Mutation goes through the aggregate root, not db.Items.Add(...) directly,
+                // so duplicate-quote and max-items-per-collection invariants can't be bypassed.
+                collection.AddItem(req.QuoteId);
+            }
+            catch (DomainException ex)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(req.QuoteId)] = [ex.Message] });
+            }
+
+            await repo.UpdateAsync(collection, ct);
+            return Results.Ok(collection);
+        });
+
+        // DELETE /api/collections/{id}/items/{quoteId}
+        group.MapDelete("/{id:int}/items/{quoteId:int}", async (int id, int quoteId, ICollectionRepository repo, CancellationToken ct) =>
+        {
+            var collection = await repo.GetByIdAsync(id, ct);
+            if (collection is null) return Results.NotFound();
+
+            try
+            {
+                collection.RemoveItem(quoteId);
+            }
+            catch (DomainException ex)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(quoteId)] = [ex.Message] });
+            }
+
+            await repo.UpdateAsync(collection, ct);
+            return Results.Ok(collection);
         });
 
         return app;

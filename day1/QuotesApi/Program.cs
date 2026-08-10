@@ -37,5 +37,6 @@ using (var scope = app.Services.CreateScope())
 
 // 4. Map Endpoints
 app.MapQuoteEndpoints();
+app.MapCollectionEndpoints();
 
 app.Run();
