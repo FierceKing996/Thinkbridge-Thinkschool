@@ -1,0 +1,6 @@
+@Refactor_controller_HostAddress = http://localhost:5119
+
+GET {{Refactor_controller_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
