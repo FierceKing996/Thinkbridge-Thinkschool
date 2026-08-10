@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Refactor_controller.Dtos;
+using Refactor_controller.Exceptions;
 using Refactor_controller.Models;
+using Refactor_controller.Pricing;
 using Refactor_controller.Services;
 using Refactor_controller.Tests.Fakes;
 using Xunit;
@@ -14,11 +16,13 @@ public class OrderServiceTests
     {
         var orderRepo = new FakeOrderRepository();
         var emailSender = new FakeEmailSender();
+        var discountCalculator = new DiscountCalculator([new CouponDiscountRule(), new LoyaltyBonusRule()]);
         var service = new OrderService(
             new FakeCustomerRepository(customers),
             new FakeProductRepository(products),
             orderRepo,
             emailSender,
+            discountCalculator,
             NullLogger<OrderService>.Instance);
 
         return (service, orderRepo, emailSender);
@@ -94,5 +98,51 @@ public class OrderServiceTests
         Assert.Equal(10m, result.Discount);
         Assert.Equal(7.2m, result.Tax);
         Assert.Equal(97.2m, result.Total);
+    }
+
+    // Test: order fails when customer does not exist
+    [Fact]
+    public async Task CreateOrderAsync_UnknownCustomer_ThrowsCustomerNotFoundException()
+    {
+        var product = new Product { Id = 1, Name = "Widget", Price = 10m, StockQuantity = 100 };
+        var (service, _, _) = BuildService([], [product]);
+
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 999,
+            Items = [new OrderItemRequest { ProductId = 1, Quantity = 1 }]
+        };
+
+        await Assert.ThrowsAsync<CustomerNotFoundException>(
+            () => service.CreateOrderAsync(request, CancellationToken.None));
+    }
+
+    // Test: discount never makes total negative
+    [Fact]
+    public async Task CreateOrderAsync_DiscountExceedsSubtotal_TotalIsClampedToZero()
+    {
+        var customer = new Customer { Id = 1, Name = "Alice", Email = "alice@example.com" };
+        var product = new Product { Id = 1, Name = "Widget", Price = 10m, StockQuantity = 100 };
+
+        var orderRepo = new FakeOrderRepository();
+        var emailSender = new FakeEmailSender();
+        var discountCalculator = new DiscountCalculator([new OversizedDiscountRule()]);
+        var service = new OrderService(
+            new FakeCustomerRepository([customer]),
+            new FakeProductRepository([product]),
+            orderRepo,
+            emailSender,
+            discountCalculator,
+            NullLogger<OrderService>.Instance);
+
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 1,
+            Items = [new OrderItemRequest { ProductId = 1, Quantity = 1 }]
+        };
+
+        var result = await service.CreateOrderAsync(request, CancellationToken.None);
+
+        Assert.Equal(0m, result.Total);
     }
 }

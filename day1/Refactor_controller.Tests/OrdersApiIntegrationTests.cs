@@ -70,4 +70,21 @@ public class OrdersApiIntegrationTests : IClassFixture<OrdersApiFactory>
         Assert.Equal(2, order!.Items.Count);
         Assert.True(order.Total > 0);
     }
+
+    // Test: validation rejects orders with negative quantity
+    [Fact]
+    public async Task PostOrder_WithNegativeQuantity_ReturnsBadRequest()
+    {
+        var client = _factory.CreateClient();
+
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 1,
+            Items = [new OrderItemRequest { ProductId = 1, Quantity = -5 }]
+        };
+
+        var response = await client.PostAsJsonAsync("/api/orders", request);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

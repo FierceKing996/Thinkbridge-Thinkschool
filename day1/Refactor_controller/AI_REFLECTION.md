@@ -1,0 +1,6 @@
+Strategy pattern that changed: orderservice had a method clculate discount with switch with hardcoded 2 rules they were part of the class that already did company lookup and stock checks , for new rule we would have to change that same function , now each rule is its own class,
+where claude over engineered: for two rules switch case is just fine , this way code reade doesnt have to jump to different fils for just 2  cases
+what claude did right :this strategy patter woud be good if we think of scale like if we ha maybe 10-12 such rules or discounts to give then it would make sense
+where i would catch bug:structural and bad code practices is what i ca catch immediately like lousy IFs , no catch or no DTOs having worked with structured language like java then exp with single threaded languages like MERN stack helps me identify async await bugs easily, an DTOs are smtg that occurs in python as well using pydantic models.  
+copilot: it saved time obv since just typing out a comment it suggested the rest 
+i would still reach for claude if at middle of the night if something goes wromng sincce ill need to hunt the bug and then see what's wrong then fix it the capabuility of claude code to read files and keep up with the context is genuinely helpful when it comes to solving a critical bug at midnight.

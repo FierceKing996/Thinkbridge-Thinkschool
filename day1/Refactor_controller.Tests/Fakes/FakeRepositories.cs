@@ -1,8 +1,16 @@
 using Refactor_controller.Models;
+using Refactor_controller.Pricing;
 using Refactor_controller.Repositories;
 using Refactor_controller.Services;
 
 namespace Refactor_controller.Tests.Fakes;
+
+// Only possible to inject a rogue rule like this because discount logic is now
+// a pluggable IDiscountRule, not a private method baked into OrderService.
+public class OversizedDiscountRule : IDiscountRule
+{
+    public decimal Calculate(DiscountContext context) => context.Subtotal + 1000m;
+}
 
 public class FakeCustomerRepository : ICustomerRepository
 {

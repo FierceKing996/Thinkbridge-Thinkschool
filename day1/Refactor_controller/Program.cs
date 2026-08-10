@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Refactor_controller.Data;
 using Refactor_controller.Exceptions;
 using Refactor_controller.Models;
+using Refactor_controller.Pricing;
 using Refactor_controller.Repositories;
 using Refactor_controller.Services;
 
@@ -20,6 +21,10 @@ builder.Services.AddScoped<IProductRepository, EfProductRepository>();
 builder.Services.AddScoped<IOrderRepository, EfOrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+builder.Services.AddScoped<IDiscountRule, CouponDiscountRule>();
+builder.Services.AddScoped<IDiscountRule, LoyaltyBonusRule>();
+builder.Services.AddScoped<IDiscountCalculator, DiscountCalculator>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

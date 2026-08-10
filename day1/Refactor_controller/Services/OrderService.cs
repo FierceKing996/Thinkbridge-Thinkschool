@@ -1,22 +1,20 @@
 using Refactor_controller.Dtos;
 using Refactor_controller.Exceptions;
 using Refactor_controller.Models;
+using Refactor_controller.Pricing;
 using Refactor_controller.Repositories;
 
 namespace Refactor_controller.Services;
 
 public class OrderService : IOrderService
 {
-    private const decimal Save10DiscountRate = 0.10m;
-    private const decimal Save20DiscountRate = 0.20m;
-    private const decimal LoyaltyBonusThreshold = 500m;
-    private const decimal LoyaltyBonusAmount = 15m;
     private const decimal TaxRate = 0.08m;
 
     private readonly ICustomerRepository _customerRepository;
     private readonly IProductRepository _productRepository;
     private readonly IOrderRepository _orderRepository;
     private readonly IEmailSender _emailSender;
+    private readonly IDiscountCalculator _discountCalculator;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
@@ -24,12 +22,14 @@ public class OrderService : IOrderService
         IProductRepository productRepository,
         IOrderRepository orderRepository,
         IEmailSender emailSender,
+        IDiscountCalculator discountCalculator,
         ILogger<OrderService> logger)
     {
         _customerRepository = customerRepository;
         _productRepository = productRepository;
         _orderRepository = orderRepository;
         _emailSender = emailSender;
+        _discountCalculator = discountCalculator;
         _logger = logger;
     }
 
@@ -93,7 +93,7 @@ public class OrderService : IOrderService
             throw new NoOrderableItemsException();
         }
 
-        var discount = CalculateDiscount(request.CouponCode, subtotal);
+        var discount = _discountCalculator.Calculate(new DiscountContext(subtotal, request.CouponCode));
         var tax = (subtotal - discount) * TaxRate;
         var total = Math.Max(0, subtotal - discount + tax);
 
@@ -142,22 +142,5 @@ public class OrderService : IOrderService
             order.Tax,
             order.TotalAmount,
             order.CreatedAtUtc);
-    }
-
-    private static decimal CalculateDiscount(string? couponCode, decimal subtotal)
-    {
-        var discount = couponCode switch
-        {
-            "SAVE10" => subtotal * Save10DiscountRate,
-            "SAVE20" => subtotal * Save20DiscountRate,
-            _ => 0m
-        };
-
-        if (subtotal > LoyaltyBonusThreshold)
-        {
-            discount += LoyaltyBonusAmount;
-        }
-
-        return discount;
     }
 }
