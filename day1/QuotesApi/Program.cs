@@ -40,3 +40,5 @@ app.MapQuoteEndpoints();
 app.MapCollectionEndpoints();
 
 app.Run();
+
+public partial class Program { }
