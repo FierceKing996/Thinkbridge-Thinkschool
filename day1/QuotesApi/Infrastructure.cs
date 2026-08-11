@@ -2,13 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace QuotesApi;
 
-public class Quote
-{
-    public int Id { get; set; }
-    public required string Author { get; set; }
-    public required string Text { get; set; }
-}
-
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Quote> Quotes => Set<Quote>();
@@ -16,6 +9,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Quote>(builder =>
+        {
+            builder.Property(q => q.Author).IsRequired().HasMaxLength(Quote.MaxAuthorLength);
+            builder.Property(q => q.Text).IsRequired().HasMaxLength(Quote.MaxTextLength);
+            builder.Property(q => q.IsDeleted).IsRequired();
+        });
+
         modelBuilder.Entity<Collection>(builder =>
         {
             builder.HasKey(c => c.Id);
@@ -52,6 +52,7 @@ public class QuoteRepository(AppDbContext db, ILogger<QuoteRepository> logger) :
     {
         logger.LogInformation("Fetching quotes page {Page} with size {Size}", page, size);
         return await db.Quotes
+            .Where(q => !q.IsDeleted)
             .Skip((page - 1) * size)
             .Take(size)
             .ToListAsync(ct);
@@ -60,7 +61,8 @@ public class QuoteRepository(AppDbContext db, ILogger<QuoteRepository> logger) :
     public async Task<Quote?> GetByIdAsync(int id, CancellationToken ct)
     {
         logger.LogInformation("Fetching quote with ID {Id}", id);
-        return await db.Quotes.FindAsync([id], ct);
+        var quote = await db.Quotes.FindAsync([id], ct);
+        return quote is { IsDeleted: false } ? quote : null;
     }
 
     public async Task<Quote> CreateAsync(Quote quote, CancellationToken ct)
@@ -71,13 +73,15 @@ public class QuoteRepository(AppDbContext db, ILogger<QuoteRepository> logger) :
         return quote;
     }
 
+    // Soft delete: Quote has no public setters and no update method, so the only
+    // way to retire one is to flip the flag through the aggregate's own Delete().
     public async Task<bool> DeleteAsync(int id, CancellationToken ct)
     {
         logger.LogInformation("Deleting quote with ID {Id}", id);
         var quote = await db.Quotes.FindAsync([id], ct);
-        if (quote is null) return false;
+        if (quote is null || quote.IsDeleted) return false;
 
-        db.Quotes.Remove(quote);
+        quote.Delete();
         await db.SaveChangesAsync(ct);
         return true;
     }

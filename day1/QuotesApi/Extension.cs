@@ -53,16 +53,14 @@ public static class Extensions
         // POST /api/quotes
         group.MapPost("/", async (CreateQuoteRequest req, IQuoteRepository repo, ITextNormalizer normalizer, CancellationToken ct) =>
         {
-            // Requirement: Validation returning ValidationProblemDetails
-            var errors = new Dictionary<string, string[]>();
-            if (string.IsNullOrWhiteSpace(req.Author)) errors.Add(nameof(req.Author), ["Author is required."]);
-            if (string.IsNullOrWhiteSpace(req.Text)) errors.Add(nameof(req.Text), ["Text is required."]);
+            // All invariant checking (length limits, etc.) lives on the aggregate itself.
+            var result = Quote.Create(normalizer.Trim(req.Author), normalizer.Trim(req.Text));
+            if (!result.Succeeded)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["error"] = [result.Error!] });
+            }
 
-            if (errors.Count > 0) return Results.ValidationProblem(errors);
-
-            var quote = new Quote { Author = normalizer.Trim(req.Author), Text = normalizer.Trim(req.Text) };
-            var created = await repo.CreateAsync(quote, ct);
-
+            var created = await repo.CreateAsync(result.Quote!, ct);
             return Results.Created($"/api/quotes/{created.Id}", created);
         });
 
