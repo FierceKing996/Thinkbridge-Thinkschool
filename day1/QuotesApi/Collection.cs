@@ -5,7 +5,7 @@ public class DomainException : Exception
     public DomainException(string message) : base(message) { }
 }
 
-public record CollectionItem(int QuoteId, DateTime AddedAt);
+public record CollectionItem(int QuoteId, DateTimeOffset AddedAt);
 
 public class Collection
 {
@@ -41,7 +41,11 @@ public class Collection
         Name = name;
     }
 
-    public void AddItem(int quoteId)
+    // Takes the current time as a parameter rather than reading IClock itself:
+    // domain entities shouldn't reach into DI/ambient services. The caller (which
+    // does have IClock) resolves "now" and hands it in - this keeps AddItem trivially
+    // unit-testable with a fixed DateTimeOffset and no clock abstraction in sight.
+    public void AddItem(int quoteId, DateTimeOffset addedAt)
     {
         if (_items.Any(i => i.QuoteId == quoteId))
         {
@@ -53,7 +57,7 @@ public class Collection
             throw new DomainException($"A collection cannot contain more than {MaxItems} items.");
         }
 
-        _items.Add(new CollectionItem(quoteId, DateTime.UtcNow));
+        _items.Add(new CollectionItem(quoteId, addedAt));
     }
 
     public void RemoveItem(int quoteId)

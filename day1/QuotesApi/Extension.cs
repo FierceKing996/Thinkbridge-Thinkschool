@@ -11,9 +11,21 @@ public static class Extensions
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(config.GetConnectionString("DefaultConnection") ?? "Data Source=quotes.db"));
         
-        // Requirement: DI with IQuoteRepository scoped
+        // Scoped: one instance per request, matching AppDbContext's lifetime -
+        // repositories hold a DbContext, which isn't thread-safe to share across requests.
         services.AddScoped<IQuoteRepository, QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
+
+        // Singleton: one clock for the whole app's lifetime. This is what makes it
+        // swappable in tests - a test host registers a FixedClock instead, and every
+        // consumer (now and any added later) sees the same frozen time with zero
+        // reliance on wall-clock timing in assertions.
+        services.AddSingleton<IClock, SystemClock>();
+
+        // Transient: stateless and cheap, so a new instance per injection removes any
+        // temptation to ever accumulate shared state on it.
+        services.AddTransient<ITextNormalizer, TextNormalizer>();
+
         services.AddProblemDetails();
 
         return services;
@@ -39,7 +51,7 @@ public static class Extensions
         });
 
         // POST /api/quotes
-        group.MapPost("/", async (CreateQuoteRequest req, IQuoteRepository repo, CancellationToken ct) =>
+        group.MapPost("/", async (CreateQuoteRequest req, IQuoteRepository repo, ITextNormalizer normalizer, CancellationToken ct) =>
         {
             // Requirement: Validation returning ValidationProblemDetails
             var errors = new Dictionary<string, string[]>();
@@ -48,9 +60,9 @@ public static class Extensions
 
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
-            var quote = new Quote { Author = req.Author, Text = req.Text };
+            var quote = new Quote { Author = normalizer.Trim(req.Author), Text = normalizer.Trim(req.Text) };
             var created = await repo.CreateAsync(quote, ct);
-            
+
             return Results.Created($"/api/quotes/{created.Id}", created);
         });
 
@@ -76,13 +88,13 @@ public static class Extensions
         });
 
         // POST /api/collections
-        group.MapPost("/", async (CreateCollectionRequest req, ICollectionRepository repo, CancellationToken ct) =>
+        group.MapPost("/", async (CreateCollectionRequest req, ICollectionRepository repo, ITextNormalizer normalizer, CancellationToken ct) =>
         {
             Collection collection;
             try
             {
                 // All invariant checking (name length, etc.) lives on the aggregate itself.
-                collection = Collection.Create(req.Name, req.OwnerId);
+                collection = Collection.Create(normalizer.Trim(req.Name), req.OwnerId);
             }
             catch (DomainException ex)
             {
@@ -94,7 +106,7 @@ public static class Extensions
         });
 
         // POST /api/collections/{id}/items
-        group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, ICollectionRepository repo, CancellationToken ct) =>
+        group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, ICollectionRepository repo, IClock clock, CancellationToken ct) =>
         {
             var collection = await repo.GetByIdAsync(id, ct);
             if (collection is null) return Results.NotFound();
@@ -103,7 +115,7 @@ public static class Extensions
             {
                 // Mutation goes through the aggregate root, not db.Items.Add(...) directly,
                 // so duplicate-quote and max-items-per-collection invariants can't be bypassed.
-                collection.AddItem(req.QuoteId);
+                collection.AddItem(req.QuoteId, clock.UtcNow);
             }
             catch (DomainException ex)
             {
