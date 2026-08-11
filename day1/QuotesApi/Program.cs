@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddJwtAuth(builder.Configuration);
 
 var app = builder.Build();
 
@@ -32,10 +33,26 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     // EnsureCreated can be used for simple SQLite setups, or MigrateAsync if you create migrations
-    await dbContext.Database.MigrateAsync(); 
+    await dbContext.Database.MigrateAsync();
+
+    if (!dbContext.Users.Any())
+    {
+        dbContext.Users.Add(new User
+        {
+            Email = "demo@quotesapi.dev",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("correct-horse-battery-staple")
+        });
+        await dbContext.SaveChangesAsync();
+    }
 }
 
-// 4. Map Endpoints
+// 4. AuthN/AuthZ - must come after routing is set up and before the endpoints
+// that use RequireAuthorization() actually run.
+app.UseAuthentication();
+app.UseAuthorization();
+
+// 5. Map Endpoints
+app.MapAuthEndpoints();
 app.MapQuoteEndpoints();
 app.MapCollectionEndpoints();
 

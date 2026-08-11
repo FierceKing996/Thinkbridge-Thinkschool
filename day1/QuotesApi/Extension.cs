@@ -1,11 +1,44 @@
-using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 namespace QuotesApi;
 
 public static class Extensions
 {
+    public static IServiceCollection AddJwtAuth(this IServiceCollection services, IConfiguration config)
+    {
+        services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
+        services.AddSingleton<ITokenService, TokenService>();
+
+        var jwtOptions = config.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+            ?? throw new InvalidOperationException("Jwt configuration section is missing.");
+        var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtOptions.SigningKey));
+
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = jwtOptions.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = jwtOptions.Audience,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = signingKey,
+                    // Default is a 5-minute grace period past expiry - zero it so an
+                    // expired token is rejected exactly when it says it expires.
+                    ClockSkew = TimeSpan.Zero
+                };
+            });
+
+        services.AddAuthorization();
+
+        return services;
+    }
+
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         services.AddDbContext<AppDbContext>(options =>
@@ -62,13 +95,40 @@ public static class Extensions
 
             var created = await repo.CreateAsync(result.Quote!, ct);
             return Results.Created($"/api/quotes/{created.Id}", created);
-        });
+        }).RequireAuthorization();
 
         // DELETE /api/quotes/{id}
         group.MapDelete("/{id:int}", async (int id, IQuoteRepository repo, CancellationToken ct) =>
         {
             var deleted = await repo.DeleteAsync(id, ct);
             return deleted ? Results.NoContent() : Results.NotFound();
+        }).RequireAuthorization();
+
+        return app;
+    }
+
+    public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/auth");
+
+        // POST /api/auth/login
+        group.MapPost("/login", async (LoginRequest req, AppDbContext db, ITokenService tokenService, CancellationToken ct) =>
+        {
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == req.Email, ct);
+            if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
+            {
+                return Results.Unauthorized();
+            }
+
+            var (accessToken, expiresIn) = tokenService.CreateAccessToken(user);
+            var refreshToken = tokenService.CreateRefreshToken();
+
+            return Results.Ok(new LoginResponse
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresIn = expiresIn
+            });
         });
 
         return app;
