@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Quote> Quotes => Set<Quote>();
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,6 +23,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             builder.Property(u => u.Email).IsRequired();
             builder.Property(u => u.PasswordHash).IsRequired();
             builder.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(builder =>
+        {
+            builder.Property(t => t.TokenHash).IsRequired();
+            builder.HasIndex(t => t.TokenHash).IsUnique();
+            builder.Property(t => t.UserId).IsRequired();
+            builder.Property(t => t.ExpiresAt).IsRequired();
+            builder.HasOne<User>().WithMany().HasForeignKey(t => t.UserId);
         });
 
         modelBuilder.Entity<Collection>(builder =>
@@ -141,3 +151,21 @@ public class CollectionRepository(AppDbContext db, ILogger<CollectionRepository>
 
 public record CreateCollectionRequest(string Name, int OwnerId);
 public record AddCollectionItemRequest(int QuoteId);
+
+public interface IRefreshTokenRepository
+{
+    Task AddAsync(RefreshToken token, CancellationToken ct);
+    Task<RefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct);
+    Task SaveChangesAsync(CancellationToken ct);
+}
+
+public class RefreshTokenRepository(AppDbContext db) : IRefreshTokenRepository
+{
+    public async Task AddAsync(RefreshToken token, CancellationToken ct) =>
+        await db.RefreshTokens.AddAsync(token, ct);
+
+    public Task<RefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct) =>
+        db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
+
+    public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+}

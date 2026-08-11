@@ -48,6 +48,8 @@ public static class Extensions
         // repositories hold a DbContext, which isn't thread-safe to share across requests.
         services.AddScoped<IQuoteRepository, QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IAuthService, AuthService>();
 
         // Singleton: one clock for the whole app's lifetime. This is what makes it
         // swappable in tests - a test host registers a FixedClock instead, and every
@@ -112,23 +114,28 @@ public static class Extensions
         var group = app.MapGroup("/api/auth");
 
         // POST /api/auth/login
-        group.MapPost("/login", async (LoginRequest req, AppDbContext db, ITokenService tokenService, CancellationToken ct) =>
+        group.MapPost("/login", async (LoginRequest req, IAuthService auth, CancellationToken ct) =>
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == req.Email, ct);
-            if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
-            {
-                return Results.Unauthorized();
-            }
+            var response = await auth.LoginAsync(req.Email, req.Password, ct);
+            return response is not null ? Results.Ok(response) : Results.Unauthorized();
+        });
 
-            var (accessToken, expiresIn) = tokenService.CreateAccessToken(user);
-            var refreshToken = tokenService.CreateRefreshToken();
+        // POST /api/auth/refresh
+        group.MapPost("/refresh", async (RefreshRequest req, IAuthService auth, CancellationToken ct) =>
+        {
+            var result = await auth.RefreshAsync(req.RefreshToken, ct);
+            // Deliberately uniform 401 for every failure reason (invalid, expired,
+            // reuse-detected) - the specific reason is logged server-side only, so
+            // a client probing this endpoint can't distinguish "wrong token" from
+            // "stolen token that tripped reuse detection".
+            return result.Succeeded ? Results.Ok(result.Tokens) : Results.Unauthorized();
+        });
 
-            return Results.Ok(new LoginResponse
-            {
-                AccessToken = accessToken,
-                RefreshToken = refreshToken,
-                ExpiresIn = expiresIn
-            });
+        // POST /api/auth/logout
+        group.MapPost("/logout", async (LogoutRequest req, IAuthService auth, CancellationToken ct) =>
+        {
+            await auth.LogoutAsync(req.RefreshToken, ct);
+            return Results.NoContent();
         });
 
         return app;
