@@ -3,7 +3,6 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -138,7 +137,7 @@ public interface IAuthService
 }
 
 public class AuthService(
-    AppDbContext db,
+    IUserRepository users,
     IRefreshTokenRepository refreshTokens,
     ITokenService tokenService,
     IClock clock,
@@ -148,7 +147,7 @@ public class AuthService(
 
     public async Task<LoginResponse?> LoginAsync(string email, string password, CancellationToken ct)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+        var user = await users.GetByEmailAsync(email, ct);
         if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
             return null;
@@ -185,7 +184,7 @@ public class AuthService(
             return RefreshResult.Fail("expired-or-revoked");
         }
 
-        var user = await db.Users.FindAsync([stored.UserId], ct)
+        var user = await users.GetByIdAsync(stored.UserId, ct)
             ?? throw new InvalidOperationException($"User {stored.UserId} no longer exists.");
 
         var response = await IssueTokenPairAsync(user, ct, previousToken: stored);

@@ -155,6 +155,21 @@ public class CollectionRepository(AppDbContext db, ILogger<CollectionRepository>
 public record CreateCollectionRequest(string Name, int OwnerId);
 public record AddCollectionItemRequest(int QuoteId);
 
+public interface IUserRepository
+{
+    Task<User?> GetByIdAsync(int id, CancellationToken ct);
+    Task<User?> GetByEmailAsync(string email, CancellationToken ct);
+}
+
+public class UserRepository(AppDbContext db) : IUserRepository
+{
+    public Task<User?> GetByIdAsync(int id, CancellationToken ct) =>
+        db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+
+    public Task<User?> GetByEmailAsync(string email, CancellationToken ct) =>
+        db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+}
+
 public interface IRefreshTokenRepository
 {
     Task AddAsync(RefreshToken token, CancellationToken ct);

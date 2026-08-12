@@ -136,6 +136,7 @@ public static class Extensions
         // repositories hold a DbContext, which isn't thread-safe to share across requests.
         services.AddScoped<IQuoteRepository, QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IAuthService, AuthService>();
 
