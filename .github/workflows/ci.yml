@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          dotnet-quality: "ga"
+
+      - name: Test QuotesApi.Tests (integration - auth, cancellation, collections)
+        run: dotnet test day1/QuotesApi.Tests/QuotesApi.Tests.csproj --configuration Release
+
+      - name: Test QuotesApi.Tests.Domain (aggregate invariants)
+        run: dotnet test day1/QuotesApi.Tests.Domain/QuotesApi.Tests.Domain.csproj --configuration Release
+
+      - name: Test Refactor_controller.Tests
+        run: dotnet test day1/Refactor_controller.Tests/Refactor_controller.Tests.csproj --configuration Release
