@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,10 @@ namespace QuotesApi;
 
 public static class Extensions
 {
+    private const string PolicySchemeName = "InternalOrEntra";
+    private const string InternalSchemeName = "Internal";
+    private const string EntraSchemeName = "Entra";
+
     public static IServiceCollection AddJwtAuth(this IServiceCollection services, IConfiguration config)
     {
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
@@ -16,27 +21,92 @@ public static class Extensions
             ?? throw new InvalidOperationException("Jwt configuration section is missing.");
         var signingKey = new SymmetricSecurityKey(Convert.FromBase64String(jwtOptions.SigningKey));
 
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
+        // Absent unless an "Entra" section has been configured (see EntraOptions) -
+        // that requires an app registration created in the Azure Portal, which this
+        // code cannot do on your behalf.
+        var entraOptions = config.GetSection(EntraOptions.SectionName).Get<EntraOptions>();
+
+        var authBuilder = services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = PolicySchemeName;
+            options.DefaultChallengeScheme = PolicySchemeName;
+        });
+
+        // Picks a scheme by peeking at the token's issuer claim - unvalidated at
+        // this point, just enough to route to the handler that will actually
+        // validate it. A malformed or missing token falls through to Internal,
+        // which then rejects it with a normal 401.
+        authBuilder.AddPolicyScheme(PolicySchemeName, "Internal or Entra JWT", options =>
+        {
+            options.ForwardDefaultSelector = context => SelectScheme(context, entraOptions);
+        });
+
+        authBuilder.AddJwtBearer(InternalSchemeName, options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
             {
+                ValidateIssuer = true,
+                ValidIssuer = jwtOptions.Issuer,
+                ValidateAudience = true,
+                ValidAudience = jwtOptions.Audience,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = signingKey,
+                // Default is a 5-minute grace period past expiry - zero it so an
+                // expired token is rejected exactly when it says it expires.
+                ClockSkew = TimeSpan.Zero
+            };
+        });
+
+        if (entraOptions is not null)
+        {
+            authBuilder.AddJwtBearer(EntraSchemeName, options =>
+            {
+                // Authority triggers OIDC metadata discovery (.well-known/openid-configuration),
+                // so Entra's signing keys are fetched and rotated automatically -
+                // this is the whole point of delegating: no key management here at all.
+                options.Authority = $"https://login.microsoftonline.com/{entraOptions.TenantId}/v2.0";
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = jwtOptions.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = jwtOptions.Audience,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = signingKey,
-                    // Default is a 5-minute grace period past expiry - zero it so an
-                    // expired token is rejected exactly when it says it expires.
-                    ClockSkew = TimeSpan.Zero
+                    ValidAudience = entraOptions.Audience,
+                    ValidateLifetime = true
                 };
             });
+        }
 
         services.AddAuthorization();
 
         return services;
+    }
+
+    private static string SelectScheme(HttpContext context, EntraOptions? entraOptions)
+    {
+        if (entraOptions is null)
+        {
+            return InternalSchemeName;
+        }
+
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        if (authHeader is null || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return InternalSchemeName;
+        }
+
+        try
+        {
+            var rawToken = authHeader["Bearer ".Length..].Trim();
+            var issuer = new JwtSecurityTokenHandler().ReadJwtToken(rawToken).Issuer;
+            return issuer.Contains("login.microsoftonline.com", StringComparison.OrdinalIgnoreCase)
+                ? EntraSchemeName
+                : InternalSchemeName;
+        }
+        catch (ArgumentException)
+        {
+            // Not a well-formed JWT - let Internal's normal validation reject it.
+            return InternalSchemeName;
+        }
     }
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
