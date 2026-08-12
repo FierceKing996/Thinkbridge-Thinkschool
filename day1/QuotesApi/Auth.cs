@@ -63,11 +63,13 @@ public class TokenService : ITokenService
 {
     private readonly JwtOptions _options;
     private readonly SymmetricSecurityKey _signingKey;
+    private readonly IClock _clock;
 
-    public TokenService(IOptions<JwtOptions> options)
+    public TokenService(IOptions<JwtOptions> options, IClock clock)
     {
         _options = options.Value;
         _signingKey = new SymmetricSecurityKey(Convert.FromBase64String(_options.SigningKey));
+        _clock = clock;
     }
 
     public (string AccessToken, int ExpiresIn) CreateAccessToken(User user)
@@ -93,7 +95,7 @@ public class TokenService : ITokenService
             issuer: _options.Issuer,
             audience: _options.Audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddSeconds(_options.AccessTokenExpirySeconds),
+            expires: _clock.UtcNow.AddSeconds(_options.AccessTokenExpirySeconds).UtcDateTime,
             signingCredentials: credentials);
 
         return (new JwtSecurityTokenHandler().WriteToken(token), _options.AccessTokenExpirySeconds);

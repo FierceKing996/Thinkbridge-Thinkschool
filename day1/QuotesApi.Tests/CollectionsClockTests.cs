@@ -57,12 +57,25 @@ public class CollectionsClockTests : IClassFixture<QuotesApiFactory>
 
         var client = _factory.CreateClient();
 
-        var collectionResponse = await client.PostAsJsonAsync(
-            "/api/collections", new CreateCollectionRequest("Fake Clock Demo", OwnerId: 1));
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login", new LoginRequest("demo@quotesapi.dev", "correct-horse-battery-staple"));
+        loginResponse.EnsureSuccessStatusCode();
+        var token = (await loginResponse.Content.ReadFromJsonAsync<LoginResponse>())!.AccessToken;
+
+        using var createCollection = new HttpRequestMessage(HttpMethod.Post, "/api/collections")
+        {
+            Headers = { { "Authorization", $"Bearer {token}" } },
+            Content = JsonContent.Create(new CreateCollectionRequest("Fake Clock Demo", OwnerId: 1))
+        };
+        var collectionResponse = await client.SendAsync(createCollection);
         var collection = await collectionResponse.Content.ReadFromJsonAsync<CollectionDto>(JsonOptions);
 
-        var itemResponse = await client.PostAsJsonAsync(
-            $"/api/collections/{collection!.Id}/items", new AddCollectionItemRequest(QuoteId: 1));
+        using var addItem = new HttpRequestMessage(HttpMethod.Post, $"/api/collections/{collection!.Id}/items")
+        {
+            Headers = { { "Authorization", $"Bearer {token}" } },
+            Content = JsonContent.Create(new AddCollectionItemRequest(QuoteId: 1))
+        };
+        var itemResponse = await client.SendAsync(addItem);
         var updated = await itemResponse.Content.ReadFromJsonAsync<CollectionDto>(JsonOptions);
 
         var addedAt = Assert.Single(updated!.Items).AddedAt;

@@ -270,7 +270,7 @@ public static class Extensions
 
             var created = await repo.AddAsync(collection, ct);
             return Results.Created($"/api/collections/{created.Id}", created);
-        });
+        }).RequireAuthorization();
 
         // POST /api/collections/{id}/items
         group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, ICollectionRepository repo, IClock clock, CancellationToken ct) =>
@@ -291,7 +291,7 @@ public static class Extensions
 
             await repo.UpdateAsync(collection, ct);
             return Results.Ok(collection);
-        });
+        }).RequireAuthorization();
 
         // DELETE /api/collections/{id}/items/{quoteId}
         group.MapDelete("/{id:int}/items/{quoteId:int}", async (int id, int quoteId, ICollectionRepository repo, CancellationToken ct) =>
@@ -310,7 +310,7 @@ public static class Extensions
 
             await repo.UpdateAsync(collection, ct);
             return Results.Ok(collection);
-        });
+        }).RequireAuthorization();
 
         return app;
     }
