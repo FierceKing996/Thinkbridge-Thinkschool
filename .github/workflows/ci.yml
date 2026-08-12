@@ -9,6 +9,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # ubuntu-latest ships Docker pre-installed and running, which is all
+    # Testcontainers needs - it talks to the daemon over the Docker socket
+    # directly, no docker-compose service definition required. First run on a
+    # given runner generation pulls mcr.microsoft.com/mssql/server:2022-latest
+    # (~5 min); GitHub caches runner images across jobs, so subsequent runs
+    # are fast.
 
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +30,14 @@ jobs:
 
       - name: Test QuotesApi.Tests.Domain (aggregate invariants)
         run: dotnet test day1/QuotesApi.Tests.Domain/QuotesApi.Tests.Domain.csproj --configuration Release
+
+      - name: Test Quotes.Tests.Unit (mocked services, no DB)
+        run: dotnet test day1/Quotes.Tests.Unit/Quotes.Tests.Unit.csproj --configuration Release
+
+      # Includes both the in-memory SQLite tests and the real-SQL-Server tests
+      # (Testcontainers spins up and tears down its own container per run).
+      - name: Test Quotes.Tests.Integration (SQLite + real SQL Server via Testcontainers)
+        run: dotnet test day1/Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --configuration Release
 
       - name: Test Refactor_controller.Tests
         run: dotnet test day1/Refactor_controller.Tests/Refactor_controller.Tests.csproj --configuration Release
