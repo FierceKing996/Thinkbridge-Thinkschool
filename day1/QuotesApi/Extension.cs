@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -43,6 +45,11 @@ public static class Extensions
 
         authBuilder.AddJwtBearer(InternalSchemeName, options =>
         {
+            // Without this, the handler silently remaps short JWT claim names to
+            // long legacy XML-schema URIs (e.g. "sub" becomes ".../nameidentifier"),
+            // so a claims lookup by JwtRegisteredClaimNames.Sub finds nothing even
+            // though the token genuinely contains a "sub" claim.
+            options.MapInboundClaims = false;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -66,6 +73,7 @@ public static class Extensions
                 // so Entra's signing keys are fetched and rotated automatically -
                 // this is the whole point of delegating: no key management here at all.
                 options.Authority = $"https://login.microsoftonline.com/{entraOptions.TenantId}/v2.0";
+                options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -76,7 +84,17 @@ public static class Extensions
             });
         }
 
-        services.AddAuthorization();
+        // Policies, not roles: "can-edit-quotes" is a portable rule name, while
+        // RequireRole("admin") would hard-wire a specific role's meaning into the
+        // endpoint. If tomorrow "who can write quotes" changes from a scope claim
+        // to something else entirely, only this policy definition needs to change -
+        // every endpoint that references it by name stays untouched.
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("can-edit-quotes", policy => policy.RequireClaim("scope", "quotes.write"));
+            options.AddPolicy("can-delete-own-quote", policy => policy.Requirements.Add(new SameOwnerRequirement()));
+        });
+        services.AddScoped<IAuthorizationHandler, SameOwnerAuthorizationHandler>();
 
         return services;
     }
@@ -156,10 +174,12 @@ public static class Extensions
         });
 
         // POST /api/quotes
-        group.MapPost("/", async (CreateQuoteRequest req, IQuoteRepository repo, ITextNormalizer normalizer, CancellationToken ct) =>
+        group.MapPost("/", async (CreateQuoteRequest req, IQuoteRepository repo, ITextNormalizer normalizer, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            var userId = int.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+
             // All invariant checking (length limits, etc.) lives on the aggregate itself.
-            var result = Quote.Create(normalizer.Trim(req.Author), normalizer.Trim(req.Text));
+            var result = Quote.Create(normalizer.Trim(req.Author), normalizer.Trim(req.Text), userId);
             if (!result.Succeeded)
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["error"] = [result.Error!] });
@@ -167,11 +187,23 @@ public static class Extensions
 
             var created = await repo.CreateAsync(result.Quote!, ct);
             return Results.Created($"/api/quotes/{created.Id}", created);
-        }).RequireAuthorization();
+        }).RequireAuthorization("can-edit-quotes");
 
         // DELETE /api/quotes/{id}
-        group.MapDelete("/{id:int}", async (int id, IQuoteRepository repo, CancellationToken ct) =>
+        group.MapDelete("/{id:int}", async (int id, IQuoteRepository repo, IAuthorizationService authService, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            var quote = await repo.GetByIdAsync(id, ct);
+            if (quote is null) return Results.NotFound();
+
+            // Resource-based checks can't be expressed via RequireAuthorization() on
+            // the route - there's no specific Quote to check against until it's been
+            // fetched, so this has to be an explicit, imperative call.
+            var authResult = await authService.AuthorizeAsync(user, quote, "can-delete-own-quote");
+            if (!authResult.Succeeded)
+            {
+                return Results.Forbid();
+            }
+
             var deleted = await repo.DeleteAsync(id, ct);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization();

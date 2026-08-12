@@ -16,12 +16,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             builder.Property(q => q.Author).IsRequired().HasMaxLength(Quote.MaxAuthorLength);
             builder.Property(q => q.Text).IsRequired().HasMaxLength(Quote.MaxTextLength);
             builder.Property(q => q.IsDeleted).IsRequired();
+            builder.Property(q => q.CreatedByUserId).IsRequired();
+            builder.HasOne<User>().WithMany().HasForeignKey(q => q.CreatedByUserId);
         });
 
         modelBuilder.Entity<User>(builder =>
         {
             builder.Property(u => u.Email).IsRequired();
             builder.Property(u => u.PasswordHash).IsRequired();
+            builder.Property(u => u.Scopes).IsRequired();
             builder.HasIndex(u => u.Email).IsUnique();
         });
 

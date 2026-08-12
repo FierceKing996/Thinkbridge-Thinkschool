@@ -72,12 +72,20 @@ public class TokenService : ITokenService
 
     public (string AccessToken, int ExpiresIn) CreateAccessToken(User user)
     {
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        // One "scope" claim per granted scope, not a single space-separated value -
+        // RequireClaim("scope", "quotes.write") looks for a claim of that type whose
+        // value matches exactly, so each scope needs its own claim instance.
+        claims.AddRange(
+            user.Scopes
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(scope => new Claim("scope", scope)));
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha256);
 

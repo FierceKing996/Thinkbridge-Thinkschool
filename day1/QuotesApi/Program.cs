@@ -40,6 +40,14 @@ using (var scope = app.Services.CreateScope())
         dbContext.Users.Add(new User
         {
             Email = "demo@quotesapi.dev",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("correct-horse-battery-staple"),
+            Scopes = "quotes.write"
+        });
+        // No scopes on purpose - seeded specifically to exercise the "authenticated
+        // but not authorized" (403) path for the can-edit-quotes claim policy.
+        dbContext.Users.Add(new User
+        {
+            Email = "readonly@quotesapi.dev",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("correct-horse-battery-staple")
         });
         await dbContext.SaveChangesAsync();

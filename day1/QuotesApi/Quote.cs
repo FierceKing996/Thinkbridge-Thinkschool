@@ -27,11 +27,12 @@ public class Quote
     public string Author { get; private set; } = string.Empty;
     public string Text { get; private set; } = string.Empty;
     public bool IsDeleted { get; private set; }
+    public int CreatedByUserId { get; private set; }
 
     // EF Core materialization only. Application code must go through Create().
     private Quote() { }
 
-    public static QuoteCreationResult Create(string author, string text)
+    public static QuoteCreationResult Create(string author, string text, int createdByUserId)
     {
         if (string.IsNullOrWhiteSpace(author) || author.Length > MaxAuthorLength)
         {
@@ -45,7 +46,7 @@ public class Quote
                 $"Text must be between {MinTextLength} and {MaxTextLength} characters.");
         }
 
-        return QuoteCreationResult.Success(new Quote { Author = author, Text = text });
+        return QuoteCreationResult.Success(new Quote { Author = author, Text = text, CreatedByUserId = createdByUserId });
     }
 
     // No Rename/UpdateText method exists on purpose - Author and Text are set only
