@@ -22,7 +22,25 @@ public class SqlServerQuotesApiFactory(string connectionString) : WebApplication
     {
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<DbContextOptions<AppDbContext>>();
+            // RemoveAll<DbContextOptions<AppDbContext>>() alone isn't enough:
+            // Program.cs's AddInfrastructure already registered Sqlite's internal
+            // provider services (IDatabaseProvider etc.) into this container, and
+            // those aren't scoped to a single DbContext type - removing only the
+            // options object leaves them behind. Adding SqlServer's provider
+            // services on top of Sqlite's still-present ones makes EF Core throw
+            // "Services for database providers 'Sqlite', 'SqlServer' have been
+            // registered" the moment any DbContext is resolved. Every EF Core
+            // service the original registration added has to go, not just one.
+            var efCoreDescriptors = services
+                .Where(d => d.ServiceType.Namespace is not null
+                    && d.ServiceType.Namespace.StartsWith("Microsoft.EntityFrameworkCore"))
+                .ToList();
+
+            foreach (var descriptor in efCoreDescriptors)
+            {
+                services.Remove(descriptor);
+            }
+
             services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlServer(connectionString,
                     sql => sql.MigrationsAssembly("QuotesApi.Migrations.SqlServer")));
