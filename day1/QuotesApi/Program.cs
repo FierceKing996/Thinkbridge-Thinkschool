@@ -2,14 +2,38 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QuotesApi;
+using Serilog;
+using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Replaces the default logging providers entirely - levels, sinks, and
+// enrichers all come from the "Serilog" section in appsettings.json (and
+// appsettings.Development.json on top of it), not hardcoded here.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext());
 
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuth(builder.Configuration);
 
 var app = builder.Build();
+
+// Pushes TraceId onto Serilog's LogContext for the lifetime of the request -
+// every log line emitted anywhere downstream (including EF Core's own SQL
+// logging and UseSerilogRequestLogging's summary line) picks it up via
+// Enrich.FromLogContext() above, without passing it through every call site.
+app.Use(async (context, next) =>
+{
+    using (LogContext.PushProperty("TraceId", context.TraceIdentifier))
+    {
+        await next();
+    }
+});
+
+app.UseSerilogRequestLogging();
 
 // 2. Exception middleware returning ProblemDetails
 app.UseExceptionHandler(exceptionHandlerApp =>
