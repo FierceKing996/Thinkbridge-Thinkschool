@@ -4,17 +4,17 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: ["**"]
+    branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     # ubuntu-latest ships Docker pre-installed and running, which is all
-    # Testcontainers needs - it talks to the daemon over the Docker socket
-    # directly, no docker-compose service definition required. First run on a
-    # given runner generation pulls mcr.microsoft.com/mssql/server:2022-latest
-    # (~5 min); GitHub caches runner images across jobs, so subsequent runs
-    # are fast.
+    # Testcontainers needs (used by Quotes.Tests.Integration's SQL Server
+    # tests) - it talks to the daemon over the Docker socket directly, no
+    # docker-compose service definition required. First run on a given runner
+    # generation pulls mcr.microsoft.com/mssql/server:2022-latest (~5 min);
+    # GitHub caches runner images across jobs, so subsequent runs are fast.
 
     steps:
       - uses: actions/checkout@v4
@@ -25,19 +25,54 @@ jobs:
           dotnet-version: "10.0.x"
           dotnet-quality: "ga"
 
-      - name: Test QuotesApi.Tests (integration - auth, cancellation, collections)
-        run: dotnet test day1/QuotesApi.Tests/QuotesApi.Tests.csproj --configuration Release
+      - name: Restore
+        run: dotnet restore Thinkbridge.slnx
 
-      - name: Test QuotesApi.Tests.Domain (aggregate invariants)
-        run: dotnet test day1/QuotesApi.Tests.Domain/QuotesApi.Tests.Domain.csproj --configuration Release
+      - name: Build
+        run: dotnet build Thinkbridge.slnx --no-restore --configuration Release
 
-      - name: Test Quotes.Tests.Unit (mocked services, no DB)
-        run: dotnet test day1/Quotes.Tests.Unit/Quotes.Tests.Unit.csproj --configuration Release
+      # No fixed LogFileName: dotnet test runs each of the 8 projects as a
+      # separate VSTest invocation, and a shared literal filename means every
+      # project after the first silently overwrites the one before it -
+      # verified locally, this is a real collision, not a hypothetical one.
+      # Letting VSTest auto-name each trx by assembly+timestamp avoids it.
+      - name: Test
+        run: >
+          dotnet test Thinkbridge.slnx --no-build --configuration Release
+          --logger "trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
 
-      # Includes both the in-memory SQLite tests and the real-SQL-Server tests
-      # (Testcontainers spins up and tears down its own container per run).
-      - name: Test Quotes.Tests.Integration (SQLite + real SQL Server via Testcontainers)
-        run: dotnet test day1/Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --configuration Release
+      # Excludes EF migration scaffolding (mechanically generated, zero
+      # hand-written logic - both the SQLite and SQL Server migration sets)
+      # and framework source-generated OpenAPI glue from the coverage
+      # calculation. This isn't loosening the gate: testing "did
+      # migrationBuilder.CreateTable get called" measures nothing real, and
+      # counting it against the threshold penalizes code nobody wrote.
+      - name: Merge coverage reports
+        if: always()
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"CoverageReport" \
+            -reporttypes:"Cobertura;TextSummary;Html" \
+            -classfilters:"-*.Migrations.*;-Microsoft.AspNetCore.OpenApi.Generated*;-*.SqlServerDesignTimeFactory"
 
-      - name: Test Refactor_controller.Tests
-        run: dotnet test day1/Refactor_controller.Tests/Refactor_controller.Tests.csproj --configuration Release
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-and-coverage
+          path: |
+            TestResults/**/*.trx
+            CoverageReport/**
+
+      - name: Enforce 70% line coverage threshold
+        run: |
+          COVERAGE=$(awk -F': ' '/Line coverage:/ {gsub(/%/,"",$2); print $2}' CoverageReport/Summary.txt)
+          echo "Line coverage: ${COVERAGE}%"
+          awk -v cov="$COVERAGE" 'BEGIN {
+            if (cov < 70) { print "FAIL: coverage " cov "% is below the 70% threshold"; exit 1 }
+            else { print "PASS: coverage " cov "% meets the 70% threshold" }
+          }'

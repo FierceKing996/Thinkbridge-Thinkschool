@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/day1/">
+    <Project Path="day1/Quotes.Tests.Integration/Quotes.Tests.Integration.csproj" />
+    <Project Path="day1/Quotes.Tests.Unit/Quotes.Tests.Unit.csproj" />
+    <Project Path="day1/QuotesApi.Migrations.SqlServer/QuotesApi.Migrations.SqlServer.csproj" />
+    <Project Path="day1/QuotesApi.Tests.Domain/QuotesApi.Tests.Domain.csproj" />
+    <Project Path="day1/QuotesApi.Tests/QuotesApi.Tests.csproj" />
+    <Project Path="day1/QuotesApi/QuotesApi.csproj" />
+    <Project Path="day1/Refactor_controller.Tests/Refactor_controller.Tests.csproj" />
+    <Project Path="day1/Refactor_controller/Refactor_controller.csproj" />
+  </Folder>
+</Solution>
