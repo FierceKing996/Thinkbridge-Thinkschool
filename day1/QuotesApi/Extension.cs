@@ -99,7 +99,11 @@ public static class Extensions
         return services;
     }
 
-    private static string SelectScheme(HttpContext context, EntraOptions? entraOptions)
+    // internal, not private: makes the routing logic directly unit-testable
+    // (construct a DefaultHttpContext, call this, assert the returned scheme
+    // name) instead of only reachable through a full HTTP round trip against
+    // a real Entra tenant this project doesn't have access to.
+    internal static string SelectScheme(HttpContext context, EntraOptions? entraOptions)
     {
         if (entraOptions is null)
         {
