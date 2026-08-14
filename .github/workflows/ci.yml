@@ -37,6 +37,15 @@ jobs:
       # verified locally, this is a real collision, not a hypothetical one.
       # Letting VSTest auto-name each trx by assembly+timestamp avoids it.
       - name: Test
+        env:
+          # Not a real secret - JwtOptions.SigningKey is required for the app
+          # host to start at all (AddJwtAuth throws otherwise), and every
+          # WebApplicationFactory<Program>-based test boots the real host.
+          # Tokens signed with this key exist only within a single ephemeral
+          # CI run and are never checked against a real deployment, so unlike
+          # the local dev key (dotnet user-secrets) or a prod key (Key Vault),
+          # this can safely live directly in the workflow file.
+          Jwt__SigningKey: "VcZIWhJ8UXYAP3MV92C4jM2IAt3Orpeq5Nvy1q6sBIQ="
         run: >
           dotnet test Thinkbridge.slnx --no-build --configuration Release
           --logger "trx"
