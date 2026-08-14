@@ -253,10 +253,21 @@ public static class Extensions
         var group = app.MapGroup("/api/collections");
 
         // GET /api/collections/{id}
-        group.MapGet("/{id:int}", async (int id, ICollectionRepository repo, CancellationToken ct) =>
+        group.MapGet("/{id:int}", async (int id, ICollectionRepository repo, IQuoteRepository quotes, CancellationToken ct) =>
         {
             var collection = await repo.GetByIdAsync(id, ct);
-            return collection is not null ? Results.Ok(collection) : Results.NotFound();
+            if (collection is null) return Results.NotFound();
+
+            // One batched WHERE Id IN (...) query for the whole collection instead
+            // of one SELECT per item - was N+1 before (see PR history), caught via
+            // the trace showing N sibling EF spans under the request's root span.
+            var quoteIds = collection.Items.Select(i => i.QuoteId).ToList();
+            var quotesById = (await quotes.GetByIdsAsync(quoteIds, ct)).ToDictionary(q => q.Id);
+            var items = collection.Items
+                .Select(i => new CollectionItemDetail(i.QuoteId, quotesById[i.QuoteId].Author, quotesById[i.QuoteId].Text, i.AddedAt))
+                .ToList();
+
+            return Results.Ok(new CollectionDetailResponse(collection.Id, collection.Name, collection.OwnerId, items));
         });
 
         // POST /api/collections

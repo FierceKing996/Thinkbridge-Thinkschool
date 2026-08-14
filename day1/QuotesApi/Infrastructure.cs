@@ -63,6 +63,7 @@ public interface IQuoteRepository
 {
     Task<List<Quote>> GetPagedAsync(int page, int size, CancellationToken ct);
     Task<Quote?> GetByIdAsync(int id, CancellationToken ct);
+    Task<List<Quote>> GetByIdsAsync(IReadOnlyCollection<int> ids, CancellationToken ct);
     Task<Quote> CreateAsync(Quote quote, CancellationToken ct);
     Task<bool> DeleteAsync(int id, CancellationToken ct);
 }
@@ -84,6 +85,17 @@ public class QuoteRepository(AppDbContext db, ILogger<QuoteRepository> logger) :
         logger.LogInformation("Fetching quote with ID {Id}", id);
         var quote = await db.Quotes.FindAsync([id], ct);
         return quote is { IsDeleted: false } ? quote : null;
+    }
+
+    // Single WHERE Id IN (...) round trip for a whole batch of ids - the fix for
+    // the N+1 that CollectionEndpoints' GET /{id} used to do (one GetByIdAsync
+    // call per collection item instead of one call for the whole collection).
+    public async Task<List<Quote>> GetByIdsAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
+    {
+        logger.LogInformation("Fetching {Count} quotes by ID", ids.Count);
+        return await db.Quotes
+            .Where(q => ids.Contains(q.Id) && !q.IsDeleted)
+            .ToListAsync(ct);
     }
 
     public async Task<Quote> CreateAsync(Quote quote, CancellationToken ct)
@@ -154,6 +166,8 @@ public class CollectionRepository(AppDbContext db, ILogger<CollectionRepository>
 
 public record CreateCollectionRequest(string Name, int OwnerId);
 public record AddCollectionItemRequest(int QuoteId);
+public record CollectionItemDetail(int QuoteId, string Author, string Text, DateTimeOffset AddedAt);
+public record CollectionDetailResponse(int Id, string Name, int OwnerId, IReadOnlyList<CollectionItemDetail> Items);
 
 public interface IUserRepository
 {
