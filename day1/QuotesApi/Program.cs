@@ -1,3 +1,5 @@
+using Azure.Identity;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,16 @@ using Serilog;
 using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Only wired when a vault URI is actually configured, so local/dev runs (no
+// Azure resources) don't need one. DefaultAzureCredential means no secret -
+// not even a Key Vault access key - ever needs to live in config; it uses
+// Managed Identity in Azure and falls back to az-cli/VS credentials locally.
+var keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+}
 
 // Replaces the default logging providers entirely - levels, sinks, and
 // enrichers all come from the "Serilog" section in appsettings.json (and
@@ -25,7 +37,8 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 // from - which is exactly why the TraceId pushed into Serilog's LogContext
 // below lines up with the trace ID shown in Jaeger for the same request,
 // with no extra wiring needed.
-builder.Services.AddOpenTelemetry()
+//
+var otel = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService(Telemetry.ServiceName))
     .WithTracing(tracing => tracing
         .AddSource(Telemetry.ServiceName)
@@ -33,6 +46,23 @@ builder.Services.AddOpenTelemetry()
         .AddEntityFrameworkCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddOtlpExporter());
+
+// UseAzureMonitor() is additive: it registers its own exporters for traces,
+// metrics, and logs alongside AddOtlpExporter() above, sending the same
+// spans to App Insights as go to the local OTLP collector - the connection
+// string never appears here, only the config key it's read from, which in
+// production resolves from the Key Vault wired in above.
+//
+// Registered only when a connection string is actually configured - same
+// "optional if the config section is absent" pattern as EntraOptions below.
+// UseAzureMonitor() throws at startup if no connection string resolves from
+// anywhere (config or the APPLICATIONINSIGHTS_CONNECTION_STRING env var), so
+// gating it here is what keeps `dotnet run` working with no Azure resources.
+var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(appInsightsConnectionString))
+{
+    otel.UseAzureMonitor(options => options.ConnectionString = appInsightsConnectionString);
+}
 
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);
