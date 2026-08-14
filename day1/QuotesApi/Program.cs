@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using QuotesApi;
 using Serilog;
 using Serilog.Context;
@@ -14,6 +16,23 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext());
+
+// AddSource(Telemetry.ServiceName) is what makes the custom "verify-password"
+// span (see AuthService) actually get exported - without it, activities from
+// that ActivitySource are created but silently dropped by the SDK. The
+// AspNetCore instrumentation creates one root Activity per request, the same
+// one ASP.NET Core's own hosting layer already derives HttpContext.TraceIdentifier
+// from - which is exactly why the TraceId pushed into Serilog's LogContext
+// below lines up with the trace ID shown in Jaeger for the same request,
+// with no extra wiring needed.
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(Telemetry.ServiceName))
+    .WithTracing(tracing => tracing
+        .AddSource(Telemetry.ServiceName)
+        .AddAspNetCoreInstrumentation()
+        .AddEntityFrameworkCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter());
 
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);

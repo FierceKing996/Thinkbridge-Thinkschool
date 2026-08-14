@@ -148,7 +148,28 @@ public class AuthService(
     public async Task<LoginResponse?> LoginAsync(string email, string password, CancellationToken ct)
     {
         var user = await users.GetByEmailAsync(email, ct);
-        if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        if (user is null)
+        {
+            return null;
+        }
+
+        // BCrypt verification is deliberately slow (adaptive work factor) and
+        // is pure CPU work - invisible to both the EF and ASP.NET Core auto
+        // instrumentation, which only see I/O. A custom span is the only way
+        // to see how much of a login request's time this step costs.
+        //
+        // Scoped as a block, not `using var` - a using declaration wouldn't
+        // dispose (end) the span until LoginAsync returns, which would wrongly
+        // nest IssueTokenPairAsync's own DB work inside "verify-password" too.
+        // Caught this by actually inspecting exported spans, not by inspection.
+        bool passwordMatches;
+        using (var activity = Telemetry.Source.StartActivity("verify-password"))
+        {
+            activity?.SetTag("user.id", user.Id);
+            passwordMatches = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+        }
+
+        if (!passwordMatches)
         {
             return null;
         }
