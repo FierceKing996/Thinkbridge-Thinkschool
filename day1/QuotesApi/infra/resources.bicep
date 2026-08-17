@@ -26,6 +26,19 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
   }
 }
 
+// Workspace-based, not classic - required for new Application Insights
+// resources since classic (non-workspace-based) creation was retired.
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'appi-${uniqueString(resourceGroup().id)}'
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+  }
+}
+
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: 'acr${uniqueString(resourceGroup().id)}'
   location: location
@@ -89,6 +102,15 @@ resource quotesApi 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
+          // Read by Program.cs's UseAzureMonitor() gate - this is the literal
+          // env var name Azure's own App Insights integration sets, not the
+          // app's "ApplicationInsights:ConnectionString" config convention.
+          env: [
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: applicationInsights.properties.ConnectionString
+            }
+          ]
         }
       ]
       scale: {
@@ -113,3 +135,4 @@ resource quotesApi 'Microsoft.App/containerApps@2023-05-01' = {
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = containerAppsEnv.id
 output QUOTESAPI_URL string = 'https://${quotesApi.properties.configuration.ingress.fqdn}'
+output APPLICATIONINSIGHTS_CONNECTION_STRING string = applicationInsights.properties.ConnectionString

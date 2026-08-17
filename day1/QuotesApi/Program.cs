@@ -56,9 +56,19 @@ var otel = builder.Services.AddOpenTelemetry()
 // Registered only when a connection string is actually configured - same
 // "optional if the config section is absent" pattern as EntraOptions below.
 // UseAzureMonitor() throws at startup if no connection string resolves from
-// anywhere (config or the APPLICATIONINSIGHTS_CONNECTION_STRING env var), so
-// gating it here is what keeps `dotnet run` working with no Azure resources.
-var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+// anywhere, so gating it here is what keeps `dotnet run` working with no
+// Azure resources.
+//
+// Checks two different keys on purpose: "ApplicationInsights:ConnectionString"
+// is this app's own config convention (appsettings.json / user-secrets, same
+// as everything else here); APPLICATIONINSIGHTS_CONNECTION_STRING is the
+// literal env var name Azure Container Apps' own App Insights integration
+// (and azd's generated Bicep, when it provisions one) actually sets - no
+// double underscore, so it never maps onto the first key. Checking only the
+// first would silently skip UseAzureMonitor() in a real Container Apps
+// deployment even though Azure wired everything up correctly.
+var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"]
+    ?? builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
 if (!string.IsNullOrEmpty(appInsightsConnectionString))
 {
     otel.UseAzureMonitor(options => options.ConnectionString = appInsightsConnectionString);
