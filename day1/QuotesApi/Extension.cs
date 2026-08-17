@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.IdentityModel.Tokens;
+using Polly;
 
 namespace QuotesApi;
 
@@ -13,6 +15,7 @@ public static class Extensions
     private const string PolicySchemeName = "InternalOrEntra";
     private const string InternalSchemeName = "Internal";
     private const string EntraSchemeName = "Entra";
+    private const string EntraBackchannelClientName = "entra-backchannel";
 
     public static IServiceCollection AddJwtAuth(this IServiceCollection services, IConfiguration config)
     {
@@ -82,6 +85,25 @@ public static class Extensions
                     ValidateLifetime = true
                 };
             });
+
+            // Entra ID is the "other API" this app calls - the metadata/JWKS
+            // fetch behind Authority above. A transient blip there (Entra
+            // rate-limiting, a network hiccup) would otherwise reject every
+            // in-flight token validation with no retry at all. Named, not
+            // typed: JwtBearerOptions.Backchannel takes a plain HttpClient,
+            // not a typed client.
+            services.AddHttpClient(EntraBackchannelClientName)
+                .AddResilienceHandler("default", ConfigureResilience);
+
+            // AddJwtBearer's simple Action<JwtBearerOptions> delegate above has no
+            // DI access, so Backchannel is wired separately via named-options
+            // configuration, which does - this runs after the delegate above,
+            // only setting Backchannel and leaving every other option untouched.
+            services.AddOptions<JwtBearerOptions>(EntraSchemeName)
+                .Configure<IHttpClientFactory>((options, httpClientFactory) =>
+                {
+                    options.Backchannel = httpClientFactory.CreateClient(EntraBackchannelClientName);
+                });
         }
 
         // Policies, not roles: "can-edit-quotes" is a portable rule name, while
@@ -97,6 +119,37 @@ public static class Extensions
         services.AddScoped<IAuthorizationHandler, SameOwnerAuthorizationHandler>();
 
         return services;
+    }
+
+    // internal, not private: lets tests exercise the exact same pipeline
+    // configuration production code registers, instead of a hand-copied
+    // duplicate that could silently drift from what actually runs.
+    //
+    // Defaults per spec: 3 retries, exponential backoff with jitter (spreads
+    // retries out so a fleet of instances doesn't all hammer Entra at the
+    // same instant after a shared blip); circuit opens once 50% of calls in
+    // a rolling 30s window fail; a 10s ceiling on the whole call including
+    // every retry, so a hung request can't block a token validation forever.
+    // No custom OnRetry/logging callback needed - AddResilienceHandler wires
+    // its own ILogger-based telemetry automatically, which is what actually
+    // emits the retry log lines.
+    internal static void ConfigureResilience(ResiliencePipelineBuilder<HttpResponseMessage> builder)
+    {
+        builder.AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = 3,
+            BackoffType = DelayBackoffType.Exponential,
+            UseJitter = true
+        });
+
+        builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(30),
+            MinimumThroughput = 4
+        });
+
+        builder.AddTimeout(TimeSpan.FromSeconds(10));
     }
 
     // internal, not private: makes the routing logic directly unit-testable
