@@ -7,6 +7,14 @@
     <UserSecretsId>db02150d-d4c1-4d98-bbb1-aa3a3f7d1e31</UserSecretsId>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <ContainerRepository>quotes-api</ContainerRepository>
+    <ContainerImageTag>0.1.0</ContainerImageTag>
+    <!-- Alpine for smaller images - musl libc, not glibc, but ASP.NET Core's
+         official Alpine image handles that; no code here depends on glibc. -->
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0-alpine</ContainerBaseImage>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.1" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />

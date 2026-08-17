@@ -64,11 +64,15 @@ if (!string.IsNullOrEmpty(appInsightsConnectionString))
     otel.UseAzureMonitor(options => options.ConnectionString = appInsightsConnectionString);
 }
 
+builder.Services.AddHealthChecks();
+
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuth(builder.Configuration);
 
 var app = builder.Build();
+
+app.MapHealthChecks("/health");
 
 // Pushes TraceId onto Serilog's LogContext for the lifetime of the request -
 // every log line emitted anywhere downstream (including EF Core's own SQL
