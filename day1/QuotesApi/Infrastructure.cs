@@ -169,6 +169,8 @@ public record AddCollectionItemRequest(int QuoteId);
 public record CollectionItemDetail(int QuoteId, string Author, string Text, DateTimeOffset AddedAt);
 public record CollectionDetailResponse(int Id, string Name, int OwnerId, IReadOnlyList<CollectionItemDetail> Items);
 
+public record AuthorSummary(string Author, int QuoteCount, string? MostRecentQuoteText);
+
 public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int id, CancellationToken ct);

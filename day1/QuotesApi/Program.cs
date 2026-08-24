@@ -150,6 +150,7 @@ app.UseAuthorization();
 app.MapAuthEndpoints();
 app.MapQuoteEndpoints();
 app.MapCollectionEndpoints();
+app.MapReportsEndpoints();
 
 app.Run();
 

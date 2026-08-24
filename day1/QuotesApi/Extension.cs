@@ -269,6 +269,38 @@ public static class Extensions
         return app;
     }
 
+    // Deliberately slow - built for the Day-9 profiling exercise, not something
+    // to copy. Two stacked anti-patterns: N+1 (one query per author instead of
+    // one grouped query) over a column - Author - that has no index at all (see
+    // the Migrations folder: Quotes only has an FK index on CreatedByUserId),
+    // so every one of those per-author queries is a full table scan.
+    // MapCollectionEndpoints' GET /{id} shows the fixed, batched-query shape
+    // for the same shape of bug.
+    public static IEndpointRouteBuilder MapReportsEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/reports");
+
+        // GET /api/reports/authors
+        group.MapGet("/authors", async (AppDbContext db, CancellationToken ct) =>
+        {
+            var authors = await db.Quotes.Select(q => q.Author).Distinct().ToListAsync(ct);
+
+            var summaries = new List<AuthorSummary>();
+            foreach (var author in authors)
+            {
+                var authorQuotes = await db.Quotes
+                    .Where(q => q.Author == author && !q.IsDeleted)
+                    .ToListAsync(ct);
+
+                summaries.Add(new AuthorSummary(author, authorQuotes.Count, authorQuotes.FirstOrDefault()?.Text));
+            }
+
+            return Results.Ok(summaries);
+        });
+
+        return app;
+    }
+
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/auth");
