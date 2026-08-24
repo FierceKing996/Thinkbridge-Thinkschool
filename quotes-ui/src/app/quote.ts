@@ -24,4 +24,11 @@ export class Quote {
   getQuotes(page: number, size: number): Observable<QuoteDto[]> {
     return this.http.get<QuoteDto[]>(`/api/quotes?page=${page}&size=${size}`);
   }
+
+  // GET /api/quotes/{id} - day1/QuotesApi/Extension.cs MapQuoteEndpoints, no
+  // auth required. 200 with the quote if found, 404 with an empty body
+  // (surfaces as an HttpErrorResponse with status 404) if not.
+  getQuoteById(id: number): Observable<QuoteDto> {
+    return this.http.get<QuoteDto>(`/api/quotes/${id}`);
+  }
 }

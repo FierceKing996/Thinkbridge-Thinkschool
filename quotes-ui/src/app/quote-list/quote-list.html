@@ -26,7 +26,10 @@
     @case ('loaded') {
       <ul>
         @for (quote of filteredQuotes(); track quote.id) {
-          <li>
+          <li
+            (click)="selectQuote(quote.id)"
+            [class.selected]="selectedId() === quote.id"
+          >
             <strong>{{ quote.author }}</strong>
             <p>{{ quote.text }}</p>
           </li>
@@ -34,4 +37,6 @@
       </ul>
     }
   }
+
+  <app-quote-detail [id]="selectedId()" />
 </section>

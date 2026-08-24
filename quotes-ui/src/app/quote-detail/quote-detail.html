@@ -1,0 +1,14 @@
+<section class="quote-detail">
+  @if (id() === null) {
+    <p class="hint">Select a quote to see its details.</p>
+  } @else if (loading()) {
+    <p>Loading quote...</p>
+  } @else if (error()) {
+    <p class="error">{{ error() }}</p>
+  } @else if (data(); as quote) {
+    <article>
+      <strong>{{ quote.author }}</strong>
+      <p>{{ quote.text }}</p>
+    </article>
+  }
+</section>

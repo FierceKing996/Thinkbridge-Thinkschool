@@ -1,8 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { By } from '@angular/platform-browser';
 
 import { QuoteList } from './quote-list';
+import { QuoteDetail } from '../quote-detail/quote-detail';
 import type { QuoteDto } from '../quote';
 
 describe('QuoteList', () => {
@@ -81,5 +83,82 @@ describe('QuoteList', () => {
     req.error(new ProgressEvent('network error'));
 
     expect(component.status()).toBe('error');
+  });
+
+  // Regression coverage: selecting a quote and then changing the underlying
+  // query (page or filter) used to leave selectedId pointing at a quote that
+  // might not even be on the new page/filtered set any more, so
+  // <app-quote-detail> kept showing stale, unrelated data instead of
+  // reflecting "nothing selected". These three tests exercise the actual
+  // methods a real user interaction reaches - nextPage(), previousPage(),
+  // and onFilterInput() - not just the underlying signals directly.
+  it('resets selectedId (and what <app-quote-detail> is bound to) when nextPage() is called', () => {
+    flushQuotes([{ id: 3, author: 'Ada Lovelace', text: 'c', isDeleted: false, createdByUserId: 1 }]);
+
+    component.selectQuote(3);
+    fixture.detectChanges();
+    expect(component.selectedId()).toBe(3);
+
+    // Selecting a quote also drives <app-quote-detail>'s own fetch - flush
+    // it so it doesn't leave a dangling request for httpMock.verify().
+    httpMock
+      .expectOne('/api/quotes/3')
+      .flush({ id: 3, author: 'Ada Lovelace', text: 'c', isDeleted: false, createdByUserId: 1 });
+
+    const detailBefore = fixture.debugElement.query(By.directive(QuoteDetail))
+      .componentInstance as QuoteDetail;
+    expect(detailBefore.id()).toBe(3);
+
+    component.nextPage();
+    fixture.detectChanges(); // flush both the refetch effect and the selection-reset effect
+    httpMock.expectOne('/api/quotes?page=2&size=10').flush([]);
+
+    expect(component.selectedId()).toBeNull();
+
+    fixture.detectChanges();
+    const detailAfter = fixture.debugElement.query(By.directive(QuoteDetail))
+      .componentInstance as QuoteDetail;
+    expect(detailAfter.id()).toBeNull();
+  });
+
+  it('resets selectedId when previousPage() is called', () => {
+    flushQuotes([{ id: 3, author: 'Ada Lovelace', text: 'c', isDeleted: false, createdByUserId: 1 }]);
+
+    component.nextPage();
+    fixture.detectChanges();
+    httpMock
+      .expectOne('/api/quotes?page=2&size=10')
+      .flush([{ id: 4, author: 'Grace Hopper', text: 'd', isDeleted: false, createdByUserId: 1 }]);
+
+    component.selectQuote(4);
+    fixture.detectChanges();
+    expect(component.selectedId()).toBe(4);
+    httpMock
+      .expectOne('/api/quotes/4')
+      .flush({ id: 4, author: 'Grace Hopper', text: 'd', isDeleted: false, createdByUserId: 1 });
+
+    component.previousPage();
+    fixture.detectChanges();
+    httpMock.expectOne('/api/quotes?page=1&size=10').flush([]);
+
+    expect(component.selectedId()).toBeNull();
+  });
+
+  it('resets selectedId when onFilterInput() is called', () => {
+    flushQuotes([{ id: 1, author: 'Marcus Aurelius', text: 'a', isDeleted: false, createdByUserId: 1 }]);
+
+    component.selectQuote(1);
+    fixture.detectChanges();
+    expect(component.selectedId()).toBe(1);
+    httpMock
+      .expectOne('/api/quotes/1')
+      .flush({ id: 1, author: 'Marcus Aurelius', text: 'a', isDeleted: false, createdByUserId: 1 });
+
+    const input = document.createElement('input');
+    input.value = 'nobody';
+    component.onFilterInput({ target: input } as unknown as Event);
+    fixture.detectChanges();
+
+    expect(component.selectedId()).toBeNull();
   });
 });
