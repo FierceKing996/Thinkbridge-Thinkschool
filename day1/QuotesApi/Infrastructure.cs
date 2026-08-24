@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 
 namespace QuotesApi;
@@ -255,6 +256,62 @@ public record CollectionItemDetail(int QuoteId, string Author, string Text, Date
 public record CollectionDetailResponse(int Id, string Name, int OwnerId, IReadOnlyList<CollectionItemDetail> Items);
 
 public record AuthorSummary(string Author, int QuoteCount, string? MostRecentQuoteText);
+
+public interface IAuthorsReportQuery
+{
+    Task<List<AuthorSummary>> GetAsync(CancellationToken ct);
+}
+
+// EF Core version - what's live behind GET /api/reports/authors. Same query
+// that replaced the N+1 loop: one GROUP BY, backed by IX_Quotes_Author.
+public class EfAuthorsReportQuery(AppDbContext db) : IAuthorsReportQuery
+{
+    public Task<List<AuthorSummary>> GetAsync(CancellationToken ct) =>
+        db.Quotes
+            .Where(q => !q.IsDeleted)
+            .GroupBy(q => q.Author)
+            .Select(g => new AuthorSummary(
+                g.Key,
+                g.Count(),
+                g.OrderByDescending(q => q.Id).Select(q => q.Text).FirstOrDefault()))
+            .ToListAsync(ct);
+}
+
+// Dapper version - the exact SQL EF generates for the query above (captured via
+// LogTo during the profiling exercise this endpoint came out of), executed
+// directly. Same index, same query plan; the only thing this skips is EF's
+// materialization pipeline - no expression tree, no entity-shaper delegate, no
+// change tracker even in the untracked case. Reuses AppDbContext's own
+// connection rather than opening a second one, so it still shares the
+// request's transaction/scope.
+public class DapperAuthorsReportQuery(AppDbContext db) : IAuthorsReportQuery
+{
+    private const string Sql = """
+        SELECT "Author", COUNT(*) AS "QuoteCount", (
+            SELECT "Text" FROM "Quotes" AS "q0"
+            WHERE NOT ("q0"."IsDeleted") AND "Quotes"."Author" = "q0"."Author"
+            ORDER BY "q0"."Id" DESC
+            LIMIT 1) AS "MostRecentQuoteText"
+        FROM "Quotes"
+        WHERE NOT ("IsDeleted")
+        GROUP BY "Author";
+        """;
+
+    // SQLite's COUNT(*) always comes back as INTEGER storage class, which
+    // Microsoft.Data.Sqlite maps to Int64 - no CAST changes that, SQLite has no
+    // narrower integer type. AuthorSummary.QuoteCount is int, so Dapper's
+    // constructor-matching rejects the (long, not int) mismatch outright rather
+    // than narrowing it; this row type exists only to receive what SQLite
+    // actually returns before converting.
+    private sealed record Row(string Author, long QuoteCount, string? MostRecentQuoteText);
+
+    public async Task<List<AuthorSummary>> GetAsync(CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var rows = await connection.QueryAsync<Row>(new CommandDefinition(Sql, cancellationToken: ct));
+        return rows.Select(r => new AuthorSummary(r.Author, (int)r.QuoteCount, r.MostRecentQuoteText)).ToList();
+    }
+}
 
 public interface IUserRepository
 {

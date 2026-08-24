@@ -195,6 +195,7 @@ public static class Extensions
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddScoped<IAddCollectionItemCommandHandler, AddCollectionItemCommandHandler>();
         services.AddScoped<ICollectionQueries, CollectionQueries>();
+        services.AddScoped<IAuthorsReportQuery, EfAuthorsReportQuery>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IAuthService, AuthService>();
@@ -275,23 +276,14 @@ public static class Extensions
     {
         var group = app.MapGroup("/api/reports");
 
-        // GET /api/reports/authors - was N+1 (one query per author) over an
-        // unindexed Author column; fixed by pushing the grouping into a single
-        // query (translated to GROUP BY + a correlated scalar subquery for the
-        // "most recent" text) backed by IX_Quotes_Author. Id DESC stands in for
-        // "most recent" since Quote has no CreatedAt - Id is monotonically
-        // increasing (IDENTITY), so highest Id is the latest inserted row.
-        group.MapGet("/authors", async (AppDbContext db, CancellationToken ct) =>
+        // GET /api/reports/authors - EF by default (IAuthorsReportQuery resolves
+        // to EfAuthorsReportQuery, see AddInfrastructure). DapperAuthorsReportQuery
+        // is the same query, same index, hand-timed against it - see the Day-9
+        // Dapper-vs-EF exercise - but isn't wired in here: this endpoint's numbers
+        // (43ms p50 under load) don't need it.
+        group.MapGet("/authors", async (IAuthorsReportQuery query, CancellationToken ct) =>
         {
-            var summaries = await db.Quotes
-                .Where(q => !q.IsDeleted)
-                .GroupBy(q => q.Author)
-                .Select(g => new AuthorSummary(
-                    g.Key,
-                    g.Count(),
-                    g.OrderByDescending(q => q.Id).Select(q => q.Text).FirstOrDefault()))
-                .ToListAsync(ct);
-
+            var summaries = await query.GetAsync(ct);
             return Results.Ok(summaries);
         });
 
