@@ -168,6 +168,87 @@ public class CollectionRepository(AppDbContext db, ILogger<CollectionRepository>
     }
 }
 
+// ---- Write model: command + handler for "add a quote to a collection" ----
+// Normalized (FK-shaped: CollectionId + QuoteId, no denormalized author/text
+// along for the ride) and validated - every mutation goes through the
+// Collection aggregate, so duplicate-quote and max-items-per-collection
+// invariants can't be bypassed.
+public record AddCollectionItemCommand(int CollectionId, int QuoteId);
+
+public class AddCollectionItemResult
+{
+    public Collection? Collection { get; }
+    public bool NotFound { get; }
+    public string? Error { get; }
+    public bool Succeeded => Collection is not null;
+
+    private AddCollectionItemResult(Collection? collection, bool notFound, string? error)
+    {
+        Collection = collection;
+        NotFound = notFound;
+        Error = error;
+    }
+
+    public static AddCollectionItemResult Success(Collection collection) => new(collection, false, null);
+    public static AddCollectionItemResult CollectionNotFound() => new(null, true, null);
+    public static AddCollectionItemResult Fail(string error) => new(null, false, error);
+}
+
+public interface IAddCollectionItemCommandHandler
+{
+    Task<AddCollectionItemResult> HandleAsync(AddCollectionItemCommand command, CancellationToken ct);
+}
+
+public class AddCollectionItemCommandHandler(ICollectionRepository repo, IClock clock) : IAddCollectionItemCommandHandler
+{
+    public async Task<AddCollectionItemResult> HandleAsync(AddCollectionItemCommand command, CancellationToken ct)
+    {
+        var collection = await repo.GetByIdAsync(command.CollectionId, ct);
+        if (collection is null) return AddCollectionItemResult.CollectionNotFound();
+
+        try
+        {
+            collection.AddItem(command.QuoteId, clock.UtcNow);
+        }
+        catch (DomainException ex)
+        {
+            return AddCollectionItemResult.Fail(ex.Message);
+        }
+
+        await repo.UpdateAsync(collection, ct);
+        return AddCollectionItemResult.Success(collection);
+    }
+}
+
+// ---- Read model: denormalized query for the collection-detail screen ----
+// Deliberately bypasses the Collection aggregate entirely - the screen doesn't
+// need invariant-checked domain objects, it needs a flat Author/Text/AddedAt
+// shape. One projection query, no repository, no private-setter hydration.
+public interface ICollectionQueries
+{
+    Task<CollectionDetailResponse?> GetDetailAsync(int id, CancellationToken ct);
+}
+
+public class CollectionQueries(AppDbContext db) : ICollectionQueries
+{
+    public async Task<CollectionDetailResponse?> GetDetailAsync(int id, CancellationToken ct)
+    {
+        var header = await db.Collections
+            .Where(c => c.Id == id)
+            .Select(c => new { c.Id, c.Name, c.OwnerId })
+            .FirstOrDefaultAsync(ct);
+        if (header is null) return null;
+
+        var items = await (
+            from ci in db.Collections.Where(c => c.Id == id).SelectMany(c => c.Items)
+            join q in db.Quotes on ci.QuoteId equals q.Id
+            select new CollectionItemDetail(ci.QuoteId, q.Author, q.Text, ci.AddedAt)
+        ).ToListAsync(ct);
+
+        return new CollectionDetailResponse(header.Id, header.Name, header.OwnerId, items);
+    }
+}
+
 public record CreateCollectionRequest(string Name, int OwnerId);
 public record AddCollectionItemRequest(int QuoteId);
 public record CollectionItemDetail(int QuoteId, string Author, string Text, DateTimeOffset AddedAt);

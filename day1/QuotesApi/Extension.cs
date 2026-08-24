@@ -193,6 +193,8 @@ public static class Extensions
         // repositories hold a DbContext, which isn't thread-safe to share across requests.
         services.AddScoped<IQuoteRepository, QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
+        services.AddScoped<IAddCollectionItemCommandHandler, AddCollectionItemCommandHandler>();
+        services.AddScoped<ICollectionQueries, CollectionQueries>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IAuthService, AuthService>();
@@ -332,22 +334,11 @@ public static class Extensions
     {
         var group = app.MapGroup("/api/collections");
 
-        // GET /api/collections/{id}
-        group.MapGet("/{id:int}", async (int id, ICollectionRepository repo, IQuoteRepository quotes, CancellationToken ct) =>
+        // GET /api/collections/{id} - read model, see ICollectionQueries
+        group.MapGet("/{id:int}", async (int id, ICollectionQueries queries, CancellationToken ct) =>
         {
-            var collection = await repo.GetByIdAsync(id, ct);
-            if (collection is null) return Results.NotFound();
-
-            // One batched WHERE Id IN (...) query for the whole collection instead
-            // of one SELECT per item - was N+1 before (see PR history), caught via
-            // the trace showing N sibling EF spans under the request's root span.
-            var quoteIds = collection.Items.Select(i => i.QuoteId).ToList();
-            var quotesById = (await quotes.GetByIdsAsync(quoteIds, ct)).ToDictionary(q => q.Id);
-            var items = collection.Items
-                .Select(i => new CollectionItemDetail(i.QuoteId, quotesById[i.QuoteId].Author, quotesById[i.QuoteId].Text, i.AddedAt))
-                .ToList();
-
-            return Results.Ok(new CollectionDetailResponse(collection.Id, collection.Name, collection.OwnerId, items));
+            var detail = await queries.GetDetailAsync(id, ct);
+            return detail is not null ? Results.Ok(detail) : Results.NotFound();
         });
 
         // POST /api/collections
@@ -368,25 +359,17 @@ public static class Extensions
             return Results.Created($"/api/collections/{created.Id}", created);
         }).RequireAuthorization();
 
-        // POST /api/collections/{id}/items
-        group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, ICollectionRepository repo, IClock clock, CancellationToken ct) =>
+        // POST /api/collections/{id}/items - write model, see AddCollectionItemCommandHandler
+        group.MapPost("/{id:int}/items", async (int id, AddCollectionItemRequest req, IAddCollectionItemCommandHandler handler, CancellationToken ct) =>
         {
-            var collection = await repo.GetByIdAsync(id, ct);
-            if (collection is null) return Results.NotFound();
-
-            try
+            var result = await handler.HandleAsync(new AddCollectionItemCommand(id, req.QuoteId), ct);
+            if (result.NotFound) return Results.NotFound();
+            if (!result.Succeeded)
             {
-                // Mutation goes through the aggregate root, not db.Items.Add(...) directly,
-                // so duplicate-quote and max-items-per-collection invariants can't be bypassed.
-                collection.AddItem(req.QuoteId, clock.UtcNow);
-            }
-            catch (DomainException ex)
-            {
-                return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(req.QuoteId)] = [ex.Message] });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(req.QuoteId)] = [result.Error!] });
             }
 
-            await repo.UpdateAsync(collection, ct);
-            return Results.Ok(collection);
+            return Results.Ok(result.Collection);
         }).RequireAuthorization();
 
         // DELETE /api/collections/{id}/items/{quoteId}
