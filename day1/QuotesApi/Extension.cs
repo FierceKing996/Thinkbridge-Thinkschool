@@ -269,31 +269,26 @@ public static class Extensions
         return app;
     }
 
-    // Deliberately slow - built for the Day-9 profiling exercise, not something
-    // to copy. Two stacked anti-patterns: N+1 (one query per author instead of
-    // one grouped query) over a column - Author - that has no index at all (see
-    // the Migrations folder: Quotes only has an FK index on CreatedByUserId),
-    // so every one of those per-author queries is a full table scan.
-    // MapCollectionEndpoints' GET /{id} shows the fixed, batched-query shape
-    // for the same shape of bug.
     public static IEndpointRouteBuilder MapReportsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/reports");
 
-        // GET /api/reports/authors
+        // GET /api/reports/authors - was N+1 (one query per author) over an
+        // unindexed Author column; fixed by pushing the grouping into a single
+        // query (translated to GROUP BY + a correlated scalar subquery for the
+        // "most recent" text) backed by IX_Quotes_Author. Id DESC stands in for
+        // "most recent" since Quote has no CreatedAt - Id is monotonically
+        // increasing (IDENTITY), so highest Id is the latest inserted row.
         group.MapGet("/authors", async (AppDbContext db, CancellationToken ct) =>
         {
-            var authors = await db.Quotes.Select(q => q.Author).Distinct().ToListAsync(ct);
-
-            var summaries = new List<AuthorSummary>();
-            foreach (var author in authors)
-            {
-                var authorQuotes = await db.Quotes
-                    .Where(q => q.Author == author && !q.IsDeleted)
-                    .ToListAsync(ct);
-
-                summaries.Add(new AuthorSummary(author, authorQuotes.Count, authorQuotes.FirstOrDefault()?.Text));
-            }
+            var summaries = await db.Quotes
+                .Where(q => !q.IsDeleted)
+                .GroupBy(q => q.Author)
+                .Select(g => new AuthorSummary(
+                    g.Key,
+                    g.Count(),
+                    g.OrderByDescending(q => q.Id).Select(q => q.Text).FirstOrDefault()))
+                .ToListAsync(ct);
 
             return Results.Ok(summaries);
         });

@@ -18,6 +18,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             builder.Property(q => q.IsDeleted).IsRequired();
             builder.Property(q => q.CreatedByUserId).IsRequired();
             builder.HasOne<User>().WithMany().HasForeignKey(q => q.CreatedByUserId);
+            // GET /api/reports/authors groups by Author for every request -
+            // without this, that GROUP BY (and any WHERE Author = ...) is a
+            // full table scan.
+            builder.HasIndex(q => q.Author);
         });
 
         modelBuilder.Entity<User>(builder =>
