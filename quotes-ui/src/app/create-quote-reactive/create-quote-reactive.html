@@ -1,0 +1,53 @@
+<section class="create-quote-reactive">
+  <h2>Add a quote (Reactive Forms)</h2>
+
+  <form [formGroup]="quoteForm" (ngSubmit)="onSubmit()">
+    <div class="field">
+      <label for="author">Author</label>
+      <input
+        id="author"
+        type="text"
+        formControlName="author"
+        #authorInput
+        [attr.maxlength]="authorMaxLength"
+        [attr.aria-invalid]="authorInvalid() ? 'true' : null"
+        [attr.aria-describedby]="authorInvalid() ? 'author-error' : null"
+      />
+      @if (authorInvalid()) {
+        <p id="author-error" class="error" role="alert">
+          {{ authorErrorMessage() ?? 'Invalid author.' }}
+        </p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="text">Quote text</label>
+      <textarea
+        id="text"
+        rows="4"
+        formControlName="text"
+        #textInput
+        [attr.maxlength]="textMaxLength"
+        [attr.aria-invalid]="textInvalid() ? 'true' : null"
+        [attr.aria-describedby]="textInvalid() ? 'text-error' : null"
+      ></textarea>
+      @if (textInvalid()) {
+        <p id="text-error" class="error" role="alert">
+          {{ textErrorMessage() ?? 'Invalid quote text.' }}
+        </p>
+      }
+    </div>
+
+    @if (submitError(); as err) {
+      <p class="error banner" role="alert">{{ err.message }}</p>
+    }
+
+    @if (submitSuccess()) {
+      <p class="success" role="status">Quote created.</p>
+    }
+
+    <button type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Creating...' : 'Create quote' }}
+    </button>
+  </form>
+</section>
