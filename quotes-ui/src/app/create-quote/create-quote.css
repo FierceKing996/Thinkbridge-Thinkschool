@@ -1,0 +1,25 @@
+.create-quote .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.create-quote label {
+  font-weight: 600;
+}
+
+.create-quote input[aria-invalid='true'],
+.create-quote textarea[aria-invalid='true'] {
+  border-color: #b3261e;
+}
+
+.create-quote .error {
+  color: #b3261e;
+  margin: 0;
+}
+
+.create-quote .success {
+  color: #146c2e;
+  margin: 0 0 0.75rem;
+}

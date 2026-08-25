@@ -1,5 +1,6 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { authInterceptor } from './auth-interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -10,6 +11,6 @@ export const appConfig: ApplicationConfig = {
     // explicit opt-in. Added by hand so the app's zoneless-ness doesn't
     // depend on an omission nobody has to notice.
     provideZonelessChangeDetection(),
-    provideHttpClient(),
+    provideHttpClient(withInterceptors([authInterceptor])),
   ]
 };

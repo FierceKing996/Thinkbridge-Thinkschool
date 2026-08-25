@@ -1,0 +1,49 @@
+<section class="create-quote">
+  <h2>Add a quote</h2>
+
+  <form [formRoot]="quoteForm">
+    <div class="field">
+      <label for="author">Author</label>
+      <input
+        id="author"
+        type="text"
+        [formField]="quoteForm.author"
+        [attr.aria-invalid]="authorInvalid() ? 'true' : null"
+        [attr.aria-describedby]="authorInvalid() ? 'author-error' : null"
+      />
+      @if (authorInvalid()) {
+        <p id="author-error" class="error" role="alert">
+          {{ quoteForm.author().errors()[0]?.message ?? 'Invalid author.' }}
+        </p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="text">Quote text</label>
+      <textarea
+        id="text"
+        rows="4"
+        [formField]="quoteForm.text"
+        [attr.aria-invalid]="textInvalid() ? 'true' : null"
+        [attr.aria-describedby]="textInvalid() ? 'text-error' : null"
+      ></textarea>
+      @if (textInvalid()) {
+        <p id="text-error" class="error" role="alert">
+          {{ quoteForm.text().errors()[0]?.message ?? 'Invalid quote text.' }}
+        </p>
+      }
+    </div>
+
+    @if (submitError(); as err) {
+      <p class="error banner" role="alert">{{ err.message }}</p>
+    }
+
+    @if (submitSuccess()) {
+      <p class="success" role="status">Quote created.</p>
+    }
+
+    <button type="submit" [disabled]="quoteForm().submitting()">
+      {{ quoteForm().submitting() ? 'Creating...' : 'Create quote' }}
+    </button>
+  </form>
+</section>
