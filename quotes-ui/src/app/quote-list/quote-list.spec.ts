@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 
 import { QuoteList } from './quote-list';
 import { QuoteDetail } from '../quote-detail/quote-detail';
+import { errorMappingInterceptor } from '../error-mapping-interceptor';
 import type { QuoteDto } from '../quote';
 
 describe('QuoteList', () => {
@@ -15,7 +16,15 @@ describe('QuoteList', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [QuoteList],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      // errorMappingInterceptor matches app.config.ts's real interceptor
+      // chain for the error path, so the effect()'s error handler is
+      // exercised against the same typed ApiError it receives in the real
+      // app (see quote-list.ts's err instanceof ApiError check), not a raw
+      // HttpErrorResponse. retryInterceptor is deliberately left out here -
+      // it has its own dedicated spec, and pulling it in would make the
+      // "status is error when the request fails" test below depend on fake
+      // timers for no benefit to what this suite is actually verifying.
+      providers: [provideHttpClient(withInterceptors([errorMappingInterceptor])), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(QuoteList);
@@ -75,6 +84,48 @@ describe('QuoteList', () => {
 
     expect(component.page()).toBe(2);
     expect(component.filteredQuotes().length).toBe(1);
+  });
+
+  // Regression coverage: a page/pageSize change while the previous
+  // getQuotes() call is still in flight (e.g. mid-retry-backoff in
+  // retryInterceptor - see retry-interceptor.ts) used to let the stale
+  // first request's response arrive *after* the new page's response and
+  // silently overwrite it, leaving the pager showing "Page 2" while the
+  // list still showed page 1's data. Modeled directly on
+  // quote-detail.spec.ts's identical "never shows stale data" test for the
+  // switchMap fix it already applies to `id` changes.
+  it('never shows stale data: changing the page before the previous request resolves cancels it and shows only the new page', () => {
+    fixture.detectChanges();
+    const req1 = httpMock.expectOne('/api/quotes?page=1&size=10');
+
+    // Before page 1's request resolves, move to page 2.
+    component.nextPage();
+    fixture.detectChanges();
+
+    // switchMap must have unsubscribed from page 1's request - HttpClient
+    // aborts the underlying call on unsubscribe, which TestRequest surfaces
+    // here.
+    expect(req1.cancelled).toBe(true);
+
+    const req2 = httpMock.expectOne('/api/quotes?page=2&size=10');
+
+    // Simulate page 1's response arriving late, *after* page 2's request
+    // went out - the real race described in the requirements. Because
+    // page 1's request was cancelled, nothing is listening for it any
+    // more, so this must NOT be able to overwrite whatever page 2 ends up
+    // producing. (A cancelled TestRequest can't be flushed at all -
+    // attempting it is itself proof there's no live subscriber left to
+    // receive it.)
+    expect(() =>
+      req1.flush([{ id: 4, author: 'Grace Hopper', text: 'd', isDeleted: false, createdByUserId: 1 }]),
+    ).toThrow();
+
+    // Page 2 resolves normally (legitimately empty) and wins.
+    req2.flush([]);
+
+    expect(component.page()).toBe(2);
+    expect(component.filteredQuotes()).toEqual([]);
+    expect(component.status()).toBe('empty');
   });
 
   it('status is error when the request fails', () => {

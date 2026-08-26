@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { QuoteDetail } from './quote-detail';
+import { errorMappingInterceptor } from '../error-mapping-interceptor';
 import type { QuoteDto } from '../quote';
 
 describe('QuoteDetail', () => {
@@ -15,7 +16,15 @@ describe('QuoteDetail', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [QuoteDetail],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      // errorMappingInterceptor matches app.config.ts's real interceptor
+      // chain for the error path, so the component's catchError is
+      // exercised against the same typed ApiError it receives in the real
+      // app (see quote-detail.ts's err instanceof ApiError check), not a
+      // raw HttpErrorResponse. retryInterceptor is deliberately left out
+      // here - GET requests never retry in this suite, keeping these tests
+      // synchronous and free of backoff-timing concerns (retryInterceptor
+      // has its own dedicated spec).
+      providers: [provideHttpClient(withInterceptors([errorMappingInterceptor])), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(QuoteDetail);

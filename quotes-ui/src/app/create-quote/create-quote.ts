@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { FormField, FormRoot, form, maxLength, minLength, required, schema, validate } from '@angular/forms/signals';
+import { ApiError } from '../api-error';
 import { Quote } from '../quote';
 
 interface CreateQuoteModel {
@@ -121,33 +121,31 @@ export class CreateQuote {
     () => this.quoteForm.text().touched() && this.quoteForm.text().invalid(),
   );
 
+  // The HTTP layer (see error-mapping-interceptor.ts, wired in globally in
+  // app.config.ts) has already turned whatever the backend/network produced
+  // into a typed ApiError with a friendly message by the time it reaches
+  // here - this just narrows ApiError's five kinds down to this form's
+  // three, it no longer re-derives anything from a raw HttpErrorResponse
+  // (status codes, response bodies) itself.
   private mapSubmitError(err: unknown): SubmitError {
-    if (err instanceof HttpErrorResponse) {
-      if (err.status === 401 || err.status === 403) {
-        return {
-          kind: 'auth',
-          message: 'You are not authorized to create quotes. Please sign in again.',
-        };
+    if (err instanceof ApiError) {
+      switch (err.kind) {
+        case 'validation':
+          return { kind: 'validation', message: err.message };
+        case 'auth':
+          return { kind: 'auth', message: err.message };
+        case 'network':
+        case 'server':
+        case 'notFound':
+          // 'server' and 'notFound' collapse into this form's 'network'
+          // bucket too: POST /api/quotes can't genuinely 404, and a 5xx is,
+          // from this form's point of view, the same "couldn't complete the
+          // request" situation as a real network failure - none of them are
+          // about what the user typed (validation) or who they're signed in
+          // as (auth), which are the two cases this form treats specially.
+          return { kind: 'network', message: err.message };
       }
-      if (err.status === 400) {
-        return { kind: 'validation', message: this.extractValidationMessage(err) };
-      }
-      return {
-        kind: 'network',
-        message: 'Could not reach the server. Check your connection and try again.',
-      };
     }
     return { kind: 'network', message: 'An unexpected error occurred. Please try again.' };
-  }
-
-  // The server always reports validation failures under a single generic
-  // "error" key (Results.ValidationProblem(new Dictionary<string, string[]>
-  // { ["error"] = [...] }) in Extension.cs) - never split per-field, even
-  // though CreateQuoteRequest has two fields. Don't assume errors.author /
-  // errors.text exist.
-  private extractValidationMessage(err: HttpErrorResponse): string {
-    const body = err.error as { errors?: Record<string, string[]> } | null | undefined;
-    const messages = body?.errors?.['error'];
-    return messages && messages.length > 0 ? messages[0] : 'The quote could not be created.';
   }
 }

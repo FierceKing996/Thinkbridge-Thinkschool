@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 
 import { CreateQuote } from './create-quote';
+import { errorMappingInterceptor } from '../error-mapping-interceptor';
 import type { QuoteDto } from '../quote';
 
 describe('CreateQuote', () => {
@@ -13,7 +14,15 @@ describe('CreateQuote', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CreateQuote],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      // errorMappingInterceptor is wired in here (matching app.config.ts's
+      // real interceptor chain for the error path) so mapSubmitError() is
+      // exercised against the same typed ApiError it receives in the real
+      // app, not a raw HttpErrorResponse. authInterceptor/retryInterceptor
+      // are deliberately left out - this suite only cares about the
+      // request/response shape on /api/quotes itself, and pulling in the
+      // token round-trip or retry backoff timing would only add unrelated
+      // noise to these tests.
+      providers: [provideHttpClient(withInterceptors([errorMappingInterceptor])), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(CreateQuote);

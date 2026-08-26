@@ -1,8 +1,13 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { Observable, catchError, map, of, switchMap } from 'rxjs';
+import { ApiError } from '../api-error';
 import { Quote, QuoteDto } from '../quote';
 import { QuoteDetail } from '../quote-detail/quote-detail';
 
 type Status = 'loading' | 'error' | 'empty' | 'loaded';
+
+type FetchResult = { kind: 'success'; quotes: QuoteDto[] } | { kind: 'error'; message: string };
 
 @Component({
   selector: 'app-quote-list',
@@ -42,27 +47,61 @@ export class QuoteList {
 
   constructor() {
     // Refetches whenever page or pageSize change - both are read inside the
-    // effect, so both are tracked dependencies. authorFilter is NOT read here
-    // on purpose: it only narrows what's already in memory, via the computed
-    // above, so typing in the filter box never triggers a network call.
-    effect(() => {
-      const page = this.page();
-      const pageSize = this.pageSize();
+    // computed, so both are tracked dependencies. authorFilter is NOT read
+    // here on purpose: it only narrows what's already in memory, via the
+    // computed above, so typing in the filter box never triggers a network
+    // call.
+    //
+    // toObservable(...).pipe(switchMap(...)) - not a plain .subscribe() on
+    // each effect run - is the fix for the same stale-response race that
+    // quote-detail.ts already solved (see that file's constructor comment
+    // for the full mechanism). It matters more here than it might look:
+    // retryInterceptor (retry-interceptor.ts) can keep a transiently-failing
+    // GET in flight for 750ms+ across its backoff attempts, which is easily
+    // enough time for a user to click "Next"/"Prev" again before the first
+    // request resolves. switchMap unsubscribing from the previous inner
+    // Observable the instant page/pageSize changes again both aborts the
+    // underlying HTTP call and - per RxJS's retry() semantics - cancels any
+    // pending backoff timer, so a late/stale response (or a stale retry
+    // attempt) can never arrive after the fact and overwrite what the new
+    // page actually returned.
+    toObservable(computed(() => ({ page: this.page(), pageSize: this.pageSize() })))
+      .pipe(
+        switchMap(({ page, pageSize }) => {
+          this.loading.set(true);
+          this.loadError.set(null);
 
-      this.loading.set(true);
-      this.loadError.set(null);
-
-      this.quoteService.getQuotes(page, pageSize).subscribe({
-        next: (result) => {
-          this.quotes.set(result);
-          this.loading.set(false);
-        },
-        error: (err: unknown) => {
-          this.loadError.set(err instanceof Error ? err.message : 'Failed to load quotes.');
-          this.loading.set(false);
-        },
+          return this.quoteService.getQuotes(page, pageSize).pipe(
+            map((quotes): FetchResult => ({ kind: 'success', quotes })),
+            // The HTTP layer (error-mapping-interceptor.ts, wired in
+            // globally in app.config.ts) has already turned whatever the
+            // backend/network produced into a typed ApiError with a
+            // friendly, human-readable .message by the time it reaches
+            // here. Checking `instanceof ApiError` specifically - not just
+            // `instanceof Error` - is deliberate: ApiError.message is built
+            // to be shown to a user (see api-error.ts), but a plain Error
+            // thrown from somewhere else in the pipe wouldn't necessarily
+            // have a message that's safe/sensible to display, so it
+            // shouldn't fall through to the same branch.
+            catchError(
+              (err: unknown): Observable<FetchResult> =>
+                of({
+                  kind: 'error',
+                  message: err instanceof ApiError ? err.message : 'Failed to load quotes.',
+                }),
+            ),
+          );
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe((result) => {
+        this.loading.set(false);
+        if (result.kind === 'success') {
+          this.quotes.set(result.quotes);
+        } else {
+          this.loadError.set(result.message);
+        }
       });
-    });
 
     // Whenever the query itself changes - a new page, or a new author
     // filter - any existing selection may no longer be in the visible list

@@ -1,7 +1,7 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, catchError, map, of, switchMap } from 'rxjs';
+import { ApiError } from '../api-error';
 import { Quote, QuoteDto } from '../quote';
 
 type FetchResult = { kind: 'success'; quote: QuoteDto } | { kind: 'error'; message: string };
@@ -48,12 +48,19 @@ export class QuoteDetail {
           this.loading.set(true);
           return this.quoteService.getQuoteById(id).pipe(
             map((quote): FetchResult => ({ kind: 'success', quote })),
+            // The HTTP layer (error-mapping-interceptor.ts, wired in
+            // globally in app.config.ts) has already turned whatever the
+            // backend/network produced into a typed ApiError by the time it
+            // reaches here - checking err.kind === 'notFound' instead of a
+            // raw HttpErrorResponse's err.status === 404.
             catchError(
-              (err: HttpErrorResponse): Observable<FetchResult> =>
+              (err: unknown): Observable<FetchResult> =>
                 of({
                   kind: 'error',
                   message:
-                    err.status === 404 ? `Quote ${id} was not found.` : 'Failed to load quote.',
+                    err instanceof ApiError && err.kind === 'notFound'
+                      ? `Quote ${id} was not found.`
+                      : 'Failed to load quote.',
                 }),
             ),
           );
