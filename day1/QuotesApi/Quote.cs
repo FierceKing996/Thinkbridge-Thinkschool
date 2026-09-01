@@ -19,9 +19,9 @@ public class QuoteCreationResult
 public class Quote
 {
     public const int MinAuthorLength = 1;
-    public const int MaxAuthorLength = 200;
+    public const int MaxAuthorLength = 10;
     public const int MinTextLength = 1;
-    public const int MaxTextLength = 1000;
+    public const int MaxTextLength = 100;
 
     public int Id { get; private set; }
     public string Author { get; private set; } = string.Empty;

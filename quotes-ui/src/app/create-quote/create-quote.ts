@@ -16,9 +16,9 @@ const EMPTY_MODEL: CreateQuoteModel = { author: '', text: '' };
 // MaxTextLength=1000) so the client rejects up front what the server would
 // reject anyway.
 const AUTHOR_MIN_LENGTH = 1;
-const AUTHOR_MAX_LENGTH = 200;
+const AUTHOR_MAX_LENGTH = 10;
 const TEXT_MIN_LENGTH = 1;
-const TEXT_MAX_LENGTH = 1000;
+const TEXT_MAX_LENGTH = 100;
 
 // required()/minLength() alone are not enough to match the server: the
 // server trims both fields before checking length (Extension.cs calls

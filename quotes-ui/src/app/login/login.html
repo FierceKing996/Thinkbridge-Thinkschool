@@ -1,0 +1,15 @@
+<section class="login">
+  <h2>Log in</h2>
+  <p>
+    This demo signs you in as the seeded <code>demo@quotesapi.dev</code> user
+    (scope <code>quotes.write</code>), which POST /api/quotes requires.
+  </p>
+
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <button type="button" (click)="logIn()" [disabled]="loading()">
+    {{ loading() ? 'Logging in...' : 'Log in as demo user' }}
+  </button>
+</section>

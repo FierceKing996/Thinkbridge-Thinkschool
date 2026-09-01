@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 
 import { QuoteDetail } from './quote-detail';
 import { errorMappingInterceptor } from '../error-mapping-interceptor';
@@ -17,14 +18,17 @@ describe('QuoteDetail', () => {
     await TestBed.configureTestingModule({
       imports: [QuoteDetail],
       // errorMappingInterceptor matches app.config.ts's real interceptor
-      // chain for the error path, so the component's catchError is
-      // exercised against the same typed ApiError it receives in the real
-      // app (see quote-detail.ts's err instanceof ApiError check), not a
-      // raw HttpErrorResponse. retryInterceptor is deliberately left out
-      // here - GET requests never retry in this suite, keeping these tests
-      // synchronous and free of backoff-timing concerns (retryInterceptor
-      // has its own dedicated spec).
-      providers: [provideHttpClient(withInterceptors([errorMappingInterceptor])), provideHttpClientTesting()],
+      // chain for the error path, so the component's catchError is exercised
+      // against the same typed ApiError it receives in the real app (see
+      // quote-detail.ts's err instanceof ApiError check), not a raw
+      // HttpErrorResponse. retryInterceptor is deliberately left out - GET
+      // requests never retry in this suite, keeping these tests synchronous.
+      // provideRouter([]) satisfies the RouterLink in the template.
+      providers: [
+        provideHttpClient(withInterceptors([errorMappingInterceptor])),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(QuoteDetail);
@@ -33,40 +37,60 @@ describe('QuoteDetail', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('shows a hint when no id is selected', () => {
+  // The ':id' route param arrives as a STRING via withComponentInputBinding()
+  // - setInput mirrors that here.
+  function setId(id: string): void {
+    fixture.componentRef.setInput('id', id);
     fixture.detectChanges();
-    expect(fixture.componentInstance.data()).toBeNull();
+  }
+
+  it('treats a missing param as invalid and makes no API call', () => {
+    fixture.detectChanges();
+    expect(fixture.componentInstance.invalidParam()).toBe(true);
     expect(fixture.componentInstance.loading()).toBe(false);
+    httpMock.expectNone(() => true);
   });
 
-  it('loads and displays the quote for the given id', () => {
-    fixture.componentRef.setInput('id', 1);
-    fixture.detectChanges();
+  it('treats a non-numeric param as invalid and makes no API call', () => {
+    setId('abc');
+    expect(fixture.componentInstance.invalidParam()).toBe(true);
+    expect(fixture.componentInstance.data()).toBeNull();
+    expect(fixture.componentInstance.error()).toBeNull();
+    httpMock.expectNone(() => true);
+  });
+
+  it('treats a non-integer numeric param (1.5) as invalid and makes no API call', () => {
+    setId('1.5');
+    expect(fixture.componentInstance.invalidParam()).toBe(true);
+    httpMock.expectNone(() => true);
+  });
+
+  it('loads and displays the quote for a valid numeric id', () => {
+    setId('1');
 
     const req = httpMock.expectOne('/api/quotes/1');
     req.flush(quoteA);
 
+    expect(fixture.componentInstance.invalidParam()).toBe(false);
     expect(fixture.componentInstance.data()).toEqual(quoteA);
     expect(fixture.componentInstance.loading()).toBe(false);
     expect(fixture.componentInstance.error()).toBeNull();
   });
 
-  it('surfaces a 404 as a distinct not-found error, not a generic one', () => {
-    fixture.componentRef.setInput('id', 999);
-    fixture.detectChanges();
+  it('surfaces a 404 (well-formed id, no such quote) as a distinct not-found error', () => {
+    setId('999');
 
     const req = httpMock.expectOne('/api/quotes/999');
     req.flush(null, { status: 404, statusText: 'Not Found' });
 
+    expect(fixture.componentInstance.invalidParam()).toBe(false);
     expect(fixture.componentInstance.data()).toBeNull();
     expect(fixture.componentInstance.error()).toContain('not found');
-    // Distinct from the generic message used for other failures.
     expect(fixture.componentInstance.error()).not.toBe('Failed to load quote.');
   });
 
   it('surfaces non-404 failures as a generic error', () => {
-    fixture.componentRef.setInput('id', 1);
-    fixture.detectChanges();
+    setId('1');
 
     const req = httpMock.expectOne('/api/quotes/1');
     req.error(new ProgressEvent('network error'));
@@ -74,31 +98,22 @@ describe('QuoteDetail', () => {
     expect(fixture.componentInstance.error()).toBe('Failed to load quote.');
   });
 
-  it('never shows stale data: switching from A to B before A resolves cancels A and shows only B', () => {
-    // Select quote A.
-    fixture.componentRef.setInput('id', 1);
-    fixture.detectChanges();
+  it('never shows stale data: switching from 1 to 2 before 1 resolves cancels 1 and shows only 2', () => {
+    setId('1');
     const reqA = httpMock.expectOne('/api/quotes/1');
 
-    // Before A responds, switch to quote B.
-    fixture.componentRef.setInput('id', 2);
-    fixture.detectChanges();
+    setId('2');
 
-    // switchMap must have unsubscribed from A's request - HttpClient aborts
+    // switchMap must have unsubscribed from 1's request - HttpClient aborts
     // the underlying call on unsubscribe, which TestRequest surfaces here.
     expect(reqA.cancelled).toBe(true);
 
     const reqB = httpMock.expectOne('/api/quotes/2');
 
-    // Simulate A's response arriving late, *after* B's request went out -
-    // the real race described in the requirements. Because A was cancelled,
-    // nothing is listening for it any more, so this must NOT be able to
-    // overwrite whatever B ends up producing. (A cancelled TestRequest can't
-    // be flushed at all - attempting it is itself proof there's no live
-    // subscriber left to receive it.)
+    // 1's response arriving late must not be able to overwrite 2's - a
+    // cancelled TestRequest can't be flushed at all.
     expect(() => reqA.flush(quoteA)).toThrow();
 
-    // B resolves normally and wins.
     reqB.flush(quoteB);
 
     expect(fixture.componentInstance.data()).toEqual(quoteB);

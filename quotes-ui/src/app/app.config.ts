@@ -1,5 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
+import { routes } from './app.routes';
 import { authInterceptor } from './auth-interceptor';
 import { errorMappingInterceptor } from './error-mapping-interceptor';
 import { retryInterceptor } from './retry-interceptor';
@@ -13,6 +15,20 @@ export const appConfig: ApplicationConfig = {
     // explicit opt-in. Added by hand so the app's zoneless-ness doesn't
     // depend on an omission nobody has to notice.
     provideZonelessChangeDetection(),
+    // withComponentInputBinding() binds the ':id' route param straight into
+    // QuoteDetail's `id` input. Route params always arrive as STRINGS (or
+    // undefined) - QuoteDetail does the parse/validate itself (see that file)
+    // rather than trusting a number.
+    //
+    // withViewTransitions() wraps each navigation in
+    // document.startViewTransition(), so the list -> detail change can
+    // visibly morph the shared quote card. The shared element is tagged with
+    // `view-transition-name: quote-card` on the detail's <article>
+    // (quote-detail.css) and, dynamically, on just the list row being
+    // navigated away from (quote-list.ts's transitioningId + quote-list.css) -
+    // a single name shared across every row at once is invalid and the
+    // browser would skip the morph entirely.
+    provideRouter(routes, withComponentInputBinding(), withViewTransitions()),
     // Order matters. withInterceptors([...]) wraps outer-to-inner in array
     // order: the first entry is outermost (runs first on the request path,
     // and - critically - LAST on the response/error path, since it's

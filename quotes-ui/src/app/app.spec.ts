@@ -1,33 +1,32 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { App } from './app';
 
 describe('App', () => {
-  let httpMock: HttpTestingController;
-
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      // App is now a router shell. provideRouter([]) with no routes means
+      // <router-outlet> renders nothing and no feature component mounts - so,
+      // unlike before, there is no /api/quotes request to flush on creation.
+      providers: [provideRouter([])],
     }).compileComponents();
-    httpMock = TestBed.inject(HttpTestingController);
   });
-
-  afterEach(() => httpMock.verify());
 
   it('should create the app', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    httpMock.expectOne('/api/quotes?page=1&size=10').flush([]);
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('should render title', () => {
+  it('renders the title and nav, with the routed view empty until navigation', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    httpMock.expectOne('/api/quotes?page=1&size=10').flush([]);
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Quotes');
+    expect(compiled.querySelector('nav')).toBeTruthy();
+    expect(compiled.querySelector('router-outlet')).toBeTruthy();
+    // No feature component is mounted with an empty route table.
+    expect(compiled.querySelector('app-quote-list')).toBeNull();
   });
 });

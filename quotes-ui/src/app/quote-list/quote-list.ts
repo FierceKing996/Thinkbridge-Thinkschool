@@ -1,9 +1,9 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { Observable, catchError, map, of, switchMap } from 'rxjs';
 import { ApiError } from '../api-error';
 import { Quote, QuoteDto } from '../quote';
-import { QuoteDetail } from '../quote-detail/quote-detail';
 
 type Status = 'loading' | 'error' | 'empty' | 'loaded';
 
@@ -11,7 +11,7 @@ type FetchResult = { kind: 'success'; quotes: QuoteDto[] } | { kind: 'error'; me
 
 @Component({
   selector: 'app-quote-list',
-  imports: [QuoteDetail],
+  imports: [RouterLink],
   templateUrl: './quote-list.html',
   styleUrl: './quote-list.css',
 })
@@ -28,9 +28,15 @@ export class QuoteList {
   private readonly loading = signal(true);
   private readonly loadError = signal<string | null>(null);
 
-  // Which quote is selected for the detail pane - null means none selected
-  // yet. Passed straight into <app-quote-detail>'s id input().
-  readonly selectedId = signal<number | null>(null);
+  // The row the user just clicked to navigate to the detail view. Its <a>
+  // gets `view-transition-name: quote-card` (see the template) for exactly
+  // the duration of that navigation, so the browser can pair it with the
+  // detail page's <article> and morph between them. It must be applied to a
+  // SINGLE element - tagging every row with the same name at once is invalid
+  // and the browser silently skips the whole transition. Limitation: on
+  // Back navigation this component is recreated, so this resets to null and
+  // the reverse morph doesn't fire - acceptable for the exercise.
+  readonly transitioningId = signal<number | null>(null);
 
   // Derived from two signals - quotes() and authorFilter() - recomputed only
   // when either changes, not on every change-detection pass.
@@ -102,20 +108,6 @@ export class QuoteList {
           this.loadError.set(result.message);
         }
       });
-
-    // Whenever the query itself changes - a new page, or a new author
-    // filter - any existing selection may no longer be in the visible list
-    // (or may not even be on the new page at all). Reset it rather than let
-    // <app-quote-detail> keep showing the last quote it successfully loaded,
-    // which would be stale/unrelated data. This covers nextPage(),
-    // previousPage(), and onFilterInput() uniformly - and any future caller
-    // that changes page or authorFilter - rather than resetting inside each
-    // of those methods individually.
-    effect(() => {
-      this.page();
-      this.authorFilter();
-      this.selectedId.set(null);
-    });
   }
 
   onFilterInput(event: Event): void {
@@ -128,9 +120,5 @@ export class QuoteList {
 
   previousPage(): void {
     this.page.update((p) => Math.max(1, p - 1));
-  }
-
-  selectQuote(id: number): void {
-    this.selectedId.set(id);
   }
 }

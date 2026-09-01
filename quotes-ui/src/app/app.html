@@ -1,5 +1,8 @@
 <main>
   <h1>Quotes</h1>
-  <app-create-quote />
-  <app-quote-list />
+  <nav>
+    <a routerLink="/quotes">All quotes</a>
+    <a routerLink="/quotes/new">Add a quote</a>
+  </nav>
+  <router-outlet />
 </main>

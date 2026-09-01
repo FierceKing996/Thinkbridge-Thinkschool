@@ -1,0 +1,10 @@
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.login .error {
+  color: #b00020;
+}

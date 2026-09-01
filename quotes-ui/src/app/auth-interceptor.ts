@@ -1,27 +1,30 @@
 import { inject } from '@angular/core';
 import { HttpInterceptorFn } from '@angular/common/http';
-import { switchMap } from 'rxjs';
 import { Auth } from './auth';
 
 // Attaches a bearer token to writes only - GET /api/quotes and
 // GET /api/quotes/{id} are unauthenticated per Extension.cs (no
-// RequireAuthorization on either), and calling the token endpoint for them
-// would just be an extra unnecessary round trip.
+// RequireAuthorization on either), and there is nothing to attach for them.
 //
-// /api/auth/* must also be excluded, not just GET: Auth.getToken() calls
-// POST /api/auth/login through this same HttpClient, so without this
-// exclusion the interceptor intercepts its own token-fetching request -
-// which needs a token, which needs this request to finish first. That's a
-// real subscription deadlock (found live: the create-quote form got stuck
-// on "Creating..." forever, zero network requests ever fired, because
-// firstValueFrom() was awaiting an Observable that could never settle).
+// /api/auth/* is also excluded: Auth.login() POSTs to /api/auth/login
+// through this same HttpClient, and attaching a (probably absent) token to
+// the very request that fetches the token is nonsense - skip it outright.
+//
+// getToken() is now synchronous (Auth no longer logs in as a side effect -
+// see auth.ts). If a token is present we clone the request with the
+// Authorization header; if not, the request goes out unauthenticated and the
+// server's 401 flows back through the normal ApiError path. In practice the
+// only write route ('quotes/new') sits behind authGuard, so a token is
+// always set by the time a POST /api/quotes is made.
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   if (req.method === 'GET' || req.url.includes('/api/auth/')) {
     return next(req);
   }
 
-  const auth = inject(Auth);
-  return auth.getToken().pipe(
-    switchMap((token) => next(req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }))),
-  );
+  const token = inject(Auth).getToken();
+  if (token === null) {
+    return next(req);
+  }
+
+  return next(req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }));
 };

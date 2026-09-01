@@ -26,17 +26,20 @@
     @case ('loaded') {
       <ul>
         @for (quote of filteredQuotes(); track quote.id) {
-          <li
-            (click)="selectQuote(quote.id)"
-            [class.selected]="selectedId() === quote.id"
-          >
-            <strong>{{ quote.author }}</strong>
-            <p>{{ quote.text }}</p>
+          <li>
+            <a
+              [routerLink]="['/quotes', quote.id]"
+              [style.view-transition-name]="
+                transitioningId() === quote.id ? 'quote-card' : null
+              "
+              (click)="transitioningId.set(quote.id)"
+            >
+              <strong>{{ quote.author }}</strong>
+              <p>{{ quote.text }}</p>
+            </a>
           </li>
         }
       </ul>
     }
   }
-
-  <app-quote-detail [id]="selectedId()" />
 </section>
