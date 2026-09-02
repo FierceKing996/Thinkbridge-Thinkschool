@@ -75,6 +75,43 @@ describe('mapToApiError', () => {
     expect(result.message.length).toBeGreaterThan(0);
   });
 
+  // Real bytes from POST /api/collections/{id}/items with a duplicate quote:
+  // {"title":"One or more validation errors occurred.","status":400,"errors":
+  // {"QuoteId":["Quote 3 is already in this collection."]},"traceId":"..."}
+  // The collections endpoints key their messages by field name, NOT under the
+  // single "error" key the quotes endpoints use - the extractor must still
+  // surface the real sentence, not collapse it to the generic fallback.
+  it('extracts the message from a field-name key (collections 400 shape), not just "error"', () => {
+    const err = new HttpErrorResponse({
+      status: 400,
+      statusText: 'Bad Request',
+      error: {
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: { QuoteId: ['Quote 3 is already in this collection.'] },
+      },
+      url: '/api/collections/2/items',
+    });
+
+    const result = mapToApiError(err);
+
+    expect(result.kind).toBe('validation');
+    expect(result.message).toBe('Quote 3 is already in this collection.');
+  });
+
+  // DELETE /api/collections/{id}/items/{quoteId} uses a lowercase "quoteId"
+  // key (nameof the route param) - a different key again from the POST above.
+  it('extracts the message from the DELETE-items "quoteId" key too', () => {
+    const err = new HttpErrorResponse({
+      status: 400,
+      statusText: 'Bad Request',
+      error: { errors: { quoteId: ['Quote 999 is not in this collection.'] } },
+      url: '/api/collections/2/items/999',
+    });
+
+    expect(mapToApiError(err).message).toBe('Quote 999 is not in this collection.');
+  });
+
   it('maps a real network failure (status 0, no response reached the client) to kind "network"', () => {
     // This is exactly what HttpClient reports for offline/DNS failure/
     // connection refused/rejected CORS preflight - status is 0, never a

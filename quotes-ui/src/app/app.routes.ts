@@ -38,6 +38,19 @@ export const routes: Routes = [
     loadComponent: () => import('./quote-detail/quote-detail').then((m) => m.QuoteDetail),
   },
   {
+    // NOT guarded: GET /api/collections/{id} is unauthenticated on the
+    // server (day1/QuotesApi), so the detail view loads for anyone. Only
+    // the add/remove buttons hit auth'd endpoints (POST/DELETE
+    // .../items) - a missing/expired token there surfaces as an ApiError
+    // with kind 'auth' and the component shows a sign-in link, rather
+    // than the whole route being gated. No literal sub-segment sibling
+    // ('collections/new' etc.) exists, so ordering here isn't
+    // load-bearing the way 'quotes/new' vs 'quotes/:id' is.
+    path: 'collections/:id',
+    loadComponent: () =>
+      import('./collection-detail/collection-detail').then((m) => m.CollectionDetail),
+  },
+  {
     path: 'login',
     loadComponent: () => import('./login/login').then((m) => m.Login),
   },

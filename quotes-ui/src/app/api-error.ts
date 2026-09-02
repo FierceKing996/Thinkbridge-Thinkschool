@@ -41,22 +41,47 @@ export class ApiError extends Error {
   }
 }
 
-const GENERIC_VALIDATION_MESSAGE = 'The quote could not be created.';
+const GENERIC_VALIDATION_MESSAGE = 'That request could not be completed.';
 const GENERIC_AUTH_MESSAGE = 'You are not authorized to perform this action. Please sign in again.';
 const GENERIC_NOT_FOUND_MESSAGE = 'The requested item was not found.';
 const GENERIC_NETWORK_MESSAGE = 'Could not reach the server. Check your connection and try again.';
 const GENERIC_SERVER_MESSAGE = 'The server encountered an error. Please try again later.';
 const GENERIC_UNKNOWN_MESSAGE = 'An unexpected error occurred. Please try again.';
 
-// The server always reports validation failures under a single generic
-// "error" key (Results.ValidationProblem(new Dictionary<string, string[]>
-// { ["error"] = [...] }) in Extension.cs) - never split per-field, even
-// though e.g. CreateQuoteRequest has two fields. Don't assume errors.author /
-// errors.text exist.
+// 400 bodies from this API don't all use the same key. The quotes endpoints
+// (Extension.cs MapQuoteEndpoints) put every message under a single literal
+// "error" key - Results.ValidationProblem(new Dictionary { ["error"] = [...] }).
+// The collections endpoints instead key by field name: POST .../items ->
+// { errors: { "QuoteId": [...] } } (nameof(req.QuoteId)), DELETE .../items/{id}
+// -> { errors: { "quoteId": [...] } } (nameof the route param), POST
+// /api/collections -> { errors: { "Name": [...] } }. So: prefer "error" for
+// the quotes shape, otherwise take the first message under whatever key is
+// present. Still never assume a SPECIFIC field key (errors.author etc.) exists.
 function extractValidationMessage(err: HttpErrorResponse): string {
-  const body = err.error as { errors?: Record<string, string[]> } | null | undefined;
-  const messages = body?.errors?.['error'];
-  return messages && messages.length > 0 ? messages[0] : GENERIC_VALIDATION_MESSAGE;
+  const body = err.error as
+    | { errors?: Record<string, string[]>; detail?: string; title?: string }
+    | null
+    | undefined;
+
+  const errors = body?.errors;
+  if (errors) {
+    const preferred = errors['error'];
+    if (preferred?.length) {
+      return preferred[0];
+    }
+    for (const messages of Object.values(errors)) {
+      if (messages?.length) {
+        return messages[0];
+      }
+    }
+  }
+
+  // A ProblemDetails body with no `errors` map at all, just a detail line.
+  if (typeof body?.detail === 'string' && body.detail.length > 0) {
+    return body.detail;
+  }
+
+  return GENERIC_VALIDATION_MESSAGE;
 }
 
 // Maps whatever comes out of HttpClient into one typed, friendly shape.
