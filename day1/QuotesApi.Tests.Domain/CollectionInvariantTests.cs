@@ -1,5 +1,10 @@
 using FluentAssertions;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Dtos;
+using QuotesApi.Models;
+using QuotesApi.Repositories;
+using QuotesApi.Services;
 using Xunit;
 
 namespace QuotesApi.Tests.Domain;

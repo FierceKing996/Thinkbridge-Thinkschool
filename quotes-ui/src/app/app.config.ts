@@ -2,9 +2,9 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessC
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
 import { routes } from './app.routes';
-import { authInterceptor } from './auth-interceptor';
-import { errorMappingInterceptor } from './error-mapping-interceptor';
-import { retryInterceptor } from './retry-interceptor';
+import { authInterceptor } from './core/auth/auth-interceptor';
+import { errorMappingInterceptor } from './core/http/error-mapping-interceptor';
+import { retryInterceptor } from './core/http/retry-interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [

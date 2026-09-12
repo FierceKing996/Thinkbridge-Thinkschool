@@ -1,0 +1,44 @@
+.login {
+  max-width: 30rem;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 1.75rem;
+}
+
+.login h2 {
+  font-size: 1.5rem;
+}
+
+.login p {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.login .error {
+  align-self: stretch;
+  color: var(--danger);
+  background: var(--danger-tint);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.9rem;
+}
+
+.login button {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  padding: 0.7rem 1.25rem;
+  font-size: 0.95rem;
+}
+
+.login button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}

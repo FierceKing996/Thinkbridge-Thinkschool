@@ -1,1 +1,303 @@
-/* You can add global styles to this file, and also import other style files */
+/* ============================================================================
+   Quotes — global design system
+   Tokens + reset + base element styling. Component files layer specifics on top.
+   ========================================================================== */
+
+:root {
+  /* Palette — warm ivory paper, near-black ink, one calm teal accent */
+  --paper: #f7f4ee;
+  --surface: #ffffff;
+  --surface-sunken: #f2ede3;
+  --ink: #211d18;
+  --ink-soft: #5c5347;
+  --ink-faint: #8b8172;
+  --line: #e4ddce;
+  --line-strong: #d3c9b5;
+
+  --accent: #1a5f7a;
+  --accent-strong: #134b60;
+  --accent-tint: #e7f0f3;
+
+  --danger: #a3311f;
+  --danger-tint: #fbeae6;
+  --success: #1f6d3b;
+  --success-tint: #e6f2e9;
+
+  /* Type */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Newsreader', Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+
+  /* Space + shape */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-sm: 0 1px 2px rgba(33, 29, 24, 0.06), 0 1px 3px rgba(33, 29, 24, 0.05);
+  --shadow-md: 0 4px 12px rgba(33, 29, 24, 0.08), 0 2px 6px rgba(33, 29, 24, 0.05);
+  --shadow-lg: 0 16px 40px rgba(33, 29, 24, 0.14);
+
+  --container: 44rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #161310;
+    --surface: #211d18;
+    --surface-sunken: #1b1814;
+    --ink: #ece6da;
+    --ink-soft: #b7ac99;
+    --ink-faint: #8a7f6c;
+    --line: #332d24;
+    --line-strong: #453d31;
+
+    --accent: #6bb8cf;
+    --accent-strong: #8fcede;
+    --accent-tint: #1e2f36;
+
+    --danger: #e8836f;
+    --danger-tint: #331f1a;
+    --success: #7fc394;
+    --success-tint: #1b2a20;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.5);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.15rem; }
+
+p { text-wrap: pretty; }
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover { color: var(--accent-strong); }
+
+code {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.1em 0.4em;
+}
+
+/* --- Form controls -------------------------------------------------------- */
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type='text'],
+input[type='number'],
+input[type='search'],
+textarea,
+select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 6.5rem;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
+}
+
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+input[aria-invalid='true']:focus,
+textarea[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px var(--danger-tint);
+}
+
+label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: 0.01em;
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  font-weight: 500;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s, opacity 0.15s;
+}
+
+button:hover:not(:disabled) { background: var(--accent-strong); }
+button:active:not(:disabled) { transform: translateY(1px); }
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary / ghost buttons: pager, dismiss, remove, etc. */
+button.dismiss,
+.pager button,
+.items li button,
+button[type='button']:not(.primary) {
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-color: var(--line-strong);
+}
+
+button.dismiss:hover:not(:disabled),
+.pager button:hover:not(:disabled),
+.items li button:hover:not(:disabled),
+button[type='button']:not(.primary):hover:not(:disabled) {
+  background: var(--surface-sunken);
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+/* Back-links styled as quiet inline links with a leading arrow */
+.back-link,
+a.back-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.back-link::before { content: '\2190\00a0'; }
+.back-link:hover { color: var(--accent); }
+
+/* --- Alert / status messages ------------------------------------------------
+   .error, .banner and .success are asserted on by the test-suite; keep the
+   selectors, restyle freely. */
+
+.error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.9rem;
+  color: var(--danger);
+  background: var(--danger-tint);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+}
+
+.banner a { color: var(--danger); font-weight: 600; }
+.banner .dismiss { margin-left: auto; padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+
+.success {
+  color: var(--success);
+  font-size: 0.9rem;
+  background: var(--success-tint);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.9rem;
+}
+
+.hint {
+  color: var(--ink-faint);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

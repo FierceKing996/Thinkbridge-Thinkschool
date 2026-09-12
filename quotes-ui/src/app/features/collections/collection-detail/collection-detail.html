@@ -1,0 +1,85 @@
+<section class="collection-detail">
+  @if (invalidParam()) {
+    <p class="error">That doesn't look like a valid collection id.</p>
+    <a class="back-link" routerLink="/quotes">Back to all quotes</a>
+  } @else {
+    @if (store.error(); as message) {
+      <div class="banner" role="alert">
+        <span>{{ message }}</span>
+        @if (store.errorKind() === 'auth') {
+          <a routerLink="/login">Sign in</a>
+        }
+        <button type="button" class="dismiss" (click)="store.clearError()">Dismiss</button>
+      </div>
+    }
+
+    @switch (store.status()) {
+      @case ('loading') {
+        <p>Loading collection...</p>
+      }
+      @case ('error') {
+        <p class="error">{{ store.error() }}</p>
+        <a class="back-link" routerLink="/quotes">Back to all quotes</a>
+      }
+      @case ('loaded') {
+        <header>
+          <h2>{{ store.name() }}</h2>
+          <p>{{ store.itemCount() }} quote(s){{ store.isBusy() ? ' - saving...' : '' }}</p>
+        </header>
+
+        @if (store.isEmpty()) {
+          <p class="empty">This collection has no quotes yet.</p>
+        } @else {
+          <ul class="items">
+            @for (item of store.items(); track item.quoteId) {
+              <li>
+                @if (item.author) {
+                  <strong>{{ item.author }}</strong>
+                  <p>{{ item.text }}</p>
+                } @else {
+                  <strong>Quote #{{ item.quoteId }}</strong>
+                  <p class="hint">Details load on refresh.</p>
+                }
+                <button
+                  type="button"
+                  (click)="remove(item.quoteId)"
+                  [disabled]="store.isRemoving(item.quoteId)"
+                >
+                  {{ store.isRemoving(item.quoteId) ? 'Removing...' : 'Remove' }}
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        <form class="add" (submit)="$event.preventDefault(); add()">
+          <label for="quote-picker">Add a quote</label>
+          @if (addableQuotes().length > 0) {
+            <select id="quote-picker" (change)="onSelectQuote($event)">
+              <option value="">Select a quote...</option>
+              @for (quote of addableQuotes(); track quote.id) {
+                <option [value]="quote.id">#{{ quote.id }} - {{ quote.author }}</option>
+              }
+            </select>
+          } @else {
+            <input
+              id="quote-picker"
+              type="number"
+              min="1"
+              placeholder="Quote id"
+              (input)="onQuoteIdInput($event)"
+            />
+          }
+          <button
+            type="submit"
+            [disabled]="selectedQuoteId() === null || store.isAdding(selectedQuoteId()!)"
+          >
+            Add
+          </button>
+        </form>
+
+        <a class="back-link" routerLink="/quotes">Back to all quotes</a>
+      }
+    }
+  }
+</section>

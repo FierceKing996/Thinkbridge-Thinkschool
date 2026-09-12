@@ -1,0 +1,72 @@
+.quote-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quote-detail > p {
+  color: var(--ink-soft);
+  padding: 1.5rem 0;
+}
+
+.quote-detail > p.error { color: var(--danger); }
+
+/* The other half of the list -> detail view transition (see app.config.ts's
+   withViewTransitions() and quote-list.ts's transitioningId). The list tags
+   the row being navigated away from with this same name, so the browser
+   pairs the two and morphs the card between the two routes instead of a
+   plain cross-fade. Only ever one <article> on this page, so a static name
+   here is fine (unlike the list, where it must be applied to one row only). */
+.quote-detail article {
+  view-transition-name: quote-card;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  /* DOM order is <strong>author then <p>quote; show the quote first, its
+     attribution beneath it, the way a pull-quote reads. */
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 3rem 2.25rem 2.25rem;
+  margin-block: 0.5rem 1rem;
+}
+
+.quote-detail article::before {
+  content: '\201C';
+  position: absolute;
+  top: -2.75rem;
+  left: 1rem;
+  z-index: -1;
+  font-family: var(--font-serif);
+  font-size: 9rem;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.14;
+  pointer-events: none;
+}
+
+.quote-detail article p {
+  font-family: var(--font-serif);
+  font-size: 1.7rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.quote-detail article strong {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.quote-detail article strong::before {
+  content: '\2014\00a0';
+  color: var(--accent);
+}

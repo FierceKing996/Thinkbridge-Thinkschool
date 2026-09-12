@@ -1,9 +1,0 @@
-/* The other half of the list -> detail view transition (see app.config.ts's
-   withViewTransitions() and quote-list.ts's transitioningId). The list tags
-   the row being navigated away from with this same name, so the browser
-   pairs the two and morphs the card between the two routes instead of a
-   plain cross-fade. Only ever one <article> on this page, so a static name
-   here is fine (unlike the list, where it must be applied to one row only). */
-.quote-detail article {
-  view-transition-name: quote-card;
-}

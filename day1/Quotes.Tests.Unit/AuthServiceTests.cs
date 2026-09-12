@@ -1,7 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Dtos;
+using QuotesApi.Models;
+using QuotesApi.Repositories;
+using QuotesApi.Services;
 using Xunit;
 
 namespace Quotes.Tests.Unit;

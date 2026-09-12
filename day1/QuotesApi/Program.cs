@@ -5,7 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Extensions;
+using QuotesApi.Models;
+using QuotesApi.Services;
 using Serilog;
 using Serilog.Context;
 
@@ -40,12 +44,23 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 //
 var otel = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService(Telemetry.ServiceName))
-    .WithTracing(tracing => tracing
-        .AddSource(Telemetry.ServiceName)
-        .AddAspNetCoreInstrumentation()
-        .AddEntityFrameworkCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddOtlpExporter());
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddSource(Telemetry.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        // Only export when a collector endpoint is actually configured. The free
+        // MonsterASP host has no OTLP collector, and an unconfigured exporter
+        // logs a connection failure on a loop - same "opt in when configured"
+        // pattern as UseAzureMonitor below.
+        if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+        {
+            tracing.AddOtlpExporter();
+        }
+    });
 
 // UseAzureMonitor() is additive: it registers its own exporters for traces,
 // metrics, and logs alongside AddOtlpExporter() above, sending the same
@@ -75,6 +90,7 @@ if (!string.IsNullOrEmpty(appInsightsConnectionString))
 }
 
 builder.Services.AddHealthChecks();
+builder.Services.AddControllers();
 
 // 1. Add Infrastructure (DI, DbContext)
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -115,10 +131,24 @@ app.UseExceptionHandler(exceptionHandlerApp =>
     });
 });
 
+// Serve the built Angular app (wwwroot/) as static files. Registered before
+// AuthN/AuthZ because the shell and its assets are public; MapFallbackToFile
+// below hands unmatched non-API routes back to index.html so client-side
+// routing deep links resolve. wwwroot/ is kept in the repo (a .gitkeep) so
+// WebApplication.CreateBuilder can resolve the web root even before a UI
+// build has staged anything into it; publish-monsterasp.ps1 fills it in.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 // 3. EF Core migrations applied at startup
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Production points the SQLite file at App_Data/ (not served, survives
+    // redeploys). SQLite won't create the directory itself.
+    Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data"));
+
     // EnsureCreated can be used for simple SQLite setups, or MigrateAsync if you create migrations
     await dbContext.Database.MigrateAsync();
 
@@ -142,15 +172,16 @@ using (var scope = app.Services.CreateScope())
 }
 
 // 4. AuthN/AuthZ - must come after routing is set up and before the endpoints
-// that use RequireAuthorization() actually run.
+// that use [Authorize] actually run.
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 5. Map Endpoints
-app.MapAuthEndpoints();
-app.MapQuoteEndpoints();
-app.MapCollectionEndpoints();
-app.MapReportsEndpoints();
+// 5. Map controllers (Controllers/*Controller.cs)
+app.MapControllers();
+
+// Anything not matched above and not a real file in wwwroot is a client-side
+// route - hand back the SPA shell.
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

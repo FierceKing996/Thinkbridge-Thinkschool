@@ -1,0 +1,115 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* Shared centered column */
+.shell {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+/* --- Header ------------------------------------------------------------- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.site-header .shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4rem;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.wordmark h1 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.wordmark__glyph {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  line-height: 0;
+  color: var(--accent);
+  transform: translateY(0.35rem);
+}
+
+.site-header nav {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.site-header nav a {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.site-header nav a:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.site-header nav a.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* --- Main ------------------------------------------------------------- */
+
+.site-main {
+  flex: 1;
+  padding-block: 2.5rem 3.5rem;
+  animation: page-in 0.35s ease both;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* --- Footer ------------------------------------------------------------- */
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding-block: 1.5rem;
+}
+
+.site-footer p {
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+@media (max-width: 32rem) {
+  .site-header .shell {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-block: 0.75rem;
+  }
+  .site-header nav { justify-content: flex-start; }
+}

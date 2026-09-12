@@ -2,7 +2,12 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Dtos;
+using QuotesApi.Models;
+using QuotesApi.Repositories;
+using QuotesApi.Services;
 using Xunit;
 
 namespace Quotes.Tests.Unit;

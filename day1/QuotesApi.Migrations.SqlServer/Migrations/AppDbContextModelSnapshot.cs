@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using QuotesApi;
+using QuotesApi.Data;
 
 #nullable disable
 
@@ -22,7 +22,34 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.AuditLogEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AuditLogEntries");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -43,7 +70,60 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
                     b.ToTable("Collections");
                 });
 
-            modelBuilder.Entity("QuotesApi.Quote", b =>
+            modelBuilder.Entity("QuotesApi.Models.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("OccurredAt")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.ToTable("OutboxMessages");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.ProcessedMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Consumer")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Consumer", "MessageId")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedMessages");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.Quote", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -76,7 +156,7 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
                     b.ToTable("Quotes");
                 });
 
-            modelBuilder.Entity("QuotesApi.RefreshToken", b =>
+            modelBuilder.Entity("QuotesApi.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -110,7 +190,7 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
-            modelBuilder.Entity("QuotesApi.User", b =>
+            modelBuilder.Entity("QuotesApi.Models.User", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -138,9 +218,9 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
-                    b.OwnsMany("QuotesApi.CollectionItem", "Items", b1 =>
+                    b.OwnsMany("QuotesApi.Models.CollectionItem", "Items", b1 =>
                         {
                             b1.Property<int>("CollectionId")
                                 .HasColumnType("int");
@@ -162,18 +242,18 @@ namespace QuotesApi.Migrations.SqlServer.Migrations
                     b.Navigation("Items");
                 });
 
-            modelBuilder.Entity("QuotesApi.Quote", b =>
+            modelBuilder.Entity("QuotesApi.Models.Quote", b =>
                 {
-                    b.HasOne("QuotesApi.User", null)
+                    b.HasOne("QuotesApi.Models.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("QuotesApi.RefreshToken", b =>
+            modelBuilder.Entity("QuotesApi.Models.RefreshToken", b =>
                 {
-                    b.HasOne("QuotesApi.User", null)
+                    b.HasOne("QuotesApi.Models.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)

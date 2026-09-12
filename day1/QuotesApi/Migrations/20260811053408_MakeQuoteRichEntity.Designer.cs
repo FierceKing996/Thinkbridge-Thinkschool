@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using QuotesApi;
+using QuotesApi.Data;
 
 #nullable disable
 
@@ -20,7 +20,7 @@ namespace QuotesApi.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -39,7 +39,7 @@ namespace QuotesApi.Migrations
                     b.ToTable("Collections");
                 });
 
-            modelBuilder.Entity("QuotesApi.Quote", b =>
+            modelBuilder.Entity("QuotesApi.Models.Quote", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -63,9 +63,9 @@ namespace QuotesApi.Migrations
                     b.ToTable("Quotes");
                 });
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
-                    b.OwnsMany("QuotesApi.CollectionItem", "Items", b1 =>
+                    b.OwnsMany("QuotesApi.Models.CollectionItem", "Items", b1 =>
                         {
                             b1.Property<int>("CollectionId")
                                 .HasColumnType("INTEGER");

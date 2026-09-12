@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard } from './auth-guard';
+import { authGuard } from './core/auth/auth-guard';
 
 // Every entry uses loadComponent: () => import(...) - a *dynamic* import is
 // what makes the bundler emit a separate lazy chunk per screen, so the
@@ -23,7 +23,7 @@ export const routes: Routes = [
   },
   {
     path: 'quotes',
-    loadComponent: () => import('./quote-list/quote-list').then((m) => m.QuoteList),
+    loadComponent: () => import('./features/quotes/quote-list/quote-list').then((m) => m.QuoteList),
   },
   {
     // Guarded - see auth-guard.ts. This is the ONLY route whose backing
@@ -31,11 +31,11 @@ export const routes: Routes = [
     // below are unauthenticated on the server (day1/QuotesApi Extension.cs).
     path: 'quotes/new',
     canActivate: [authGuard],
-    loadComponent: () => import('./create-quote/create-quote').then((m) => m.CreateQuote),
+    loadComponent: () => import('./features/quotes/create-quote/create-quote').then((m) => m.CreateQuote),
   },
   {
     path: 'quotes/:id',
-    loadComponent: () => import('./quote-detail/quote-detail').then((m) => m.QuoteDetail),
+    loadComponent: () => import('./features/quotes/quote-detail/quote-detail').then((m) => m.QuoteDetail),
   },
   {
     // NOT guarded: GET /api/collections/{id} is unauthenticated on the
@@ -48,11 +48,11 @@ export const routes: Routes = [
     // load-bearing the way 'quotes/new' vs 'quotes/:id' is.
     path: 'collections/:id',
     loadComponent: () =>
-      import('./collection-detail/collection-detail').then((m) => m.CollectionDetail),
+      import('./features/collections/collection-detail/collection-detail').then((m) => m.CollectionDetail),
   },
   {
     path: 'login',
-    loadComponent: () => import('./login/login').then((m) => m.Login),
+    loadComponent: () => import('./features/auth/login/login').then((m) => m.Login),
   },
   {
     // Unknown URL -> back to the list rather than a dead end. redirectTo (not

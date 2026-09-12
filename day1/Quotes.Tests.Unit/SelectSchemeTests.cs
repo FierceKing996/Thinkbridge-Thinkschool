@@ -4,12 +4,17 @@ using System.Security.Cryptography;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.Tokens;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Dtos;
+using QuotesApi.Models;
+using QuotesApi.Repositories;
+using QuotesApi.Services;
 using Xunit;
 
 namespace Quotes.Tests.Unit;
 
-// Covers Extensions.SelectScheme directly - the routing logic that decides
+// Covers AuthenticationExtensions.SelectScheme directly - the routing logic that decides
 // whether an incoming bearer token should be validated against the internal
 // HS256 scheme or Entra. This was previously only reachable through a full
 // HTTP round trip against a real Entra tenant, which this project has no
@@ -46,7 +51,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader($"Bearer {BuildToken("https://login.microsoftonline.com/tenant/v2.0")}");
 
-        var scheme = Extensions.SelectScheme(context, entraOptions: null);
+        var scheme = AuthenticationExtensions.SelectScheme(context, entraOptions: null);
 
         scheme.Should().Be("Internal");
     }
@@ -56,7 +61,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader(null);
 
-        var scheme = Extensions.SelectScheme(context, FakeEntraOptions);
+        var scheme = AuthenticationExtensions.SelectScheme(context, FakeEntraOptions);
 
         scheme.Should().Be("Internal");
     }
@@ -68,7 +73,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader(headerValue);
 
-        var scheme = Extensions.SelectScheme(context, FakeEntraOptions);
+        var scheme = AuthenticationExtensions.SelectScheme(context, FakeEntraOptions);
 
         scheme.Should().Be("Internal");
     }
@@ -78,7 +83,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader("Bearer not-a-real-jwt");
 
-        var scheme = Extensions.SelectScheme(context, FakeEntraOptions);
+        var scheme = AuthenticationExtensions.SelectScheme(context, FakeEntraOptions);
 
         scheme.Should().Be("Internal");
     }
@@ -88,7 +93,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader($"Bearer {BuildToken("https://my-own-issuer")}");
 
-        var scheme = Extensions.SelectScheme(context, FakeEntraOptions);
+        var scheme = AuthenticationExtensions.SelectScheme(context, FakeEntraOptions);
 
         scheme.Should().Be("Internal");
     }
@@ -98,7 +103,7 @@ public class SelectSchemeTests
     {
         var context = ContextWithAuthHeader($"Bearer {BuildToken("https://login.microsoftonline.com/some-tenant/v2.0")}");
 
-        var scheme = Extensions.SelectScheme(context, FakeEntraOptions);
+        var scheme = AuthenticationExtensions.SelectScheme(context, FakeEntraOptions);
 
         scheme.Should().Be("Entra");
     }

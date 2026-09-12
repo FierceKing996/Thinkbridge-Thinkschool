@@ -3,7 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using QuotesApi;
+using QuotesApi.Data;
 
 #nullable disable
 
@@ -17,7 +17,32 @@ namespace QuotesApi.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.AuditLogEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AuditLogEntries");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -36,7 +61,58 @@ namespace QuotesApi.Migrations
                     b.ToTable("Collections");
                 });
 
-            modelBuilder.Entity("QuotesApi.Quote", b =>
+            modelBuilder.Entity("QuotesApi.Models.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("OccurredAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.ToTable("OutboxMessages");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.ProcessedMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Consumer")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Consumer", "MessageId")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedMessages");
+                });
+
+            modelBuilder.Entity("QuotesApi.Models.Quote", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -67,7 +143,7 @@ namespace QuotesApi.Migrations
                     b.ToTable("Quotes");
                 });
 
-            modelBuilder.Entity("QuotesApi.RefreshToken", b =>
+            modelBuilder.Entity("QuotesApi.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -99,7 +175,7 @@ namespace QuotesApi.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
-            modelBuilder.Entity("QuotesApi.User", b =>
+            modelBuilder.Entity("QuotesApi.Models.User", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -125,9 +201,9 @@ namespace QuotesApi.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("QuotesApi.Collection", b =>
+            modelBuilder.Entity("QuotesApi.Models.Collection", b =>
                 {
-                    b.OwnsMany("QuotesApi.CollectionItem", "Items", b1 =>
+                    b.OwnsMany("QuotesApi.Models.CollectionItem", "Items", b1 =>
                         {
                             b1.Property<int>("CollectionId")
                                 .HasColumnType("INTEGER");
@@ -149,18 +225,18 @@ namespace QuotesApi.Migrations
                     b.Navigation("Items");
                 });
 
-            modelBuilder.Entity("QuotesApi.Quote", b =>
+            modelBuilder.Entity("QuotesApi.Models.Quote", b =>
                 {
-                    b.HasOne("QuotesApi.User", null)
+                    b.HasOne("QuotesApi.Models.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("QuotesApi.RefreshToken", b =>
+            modelBuilder.Entity("QuotesApi.Models.RefreshToken", b =>
                 {
-                    b.HasOne("QuotesApi.User", null)
+                    b.HasOne("QuotesApi.Models.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)

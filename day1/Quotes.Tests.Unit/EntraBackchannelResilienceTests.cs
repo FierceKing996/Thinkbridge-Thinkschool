@@ -3,11 +3,16 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
-using QuotesApi;
+using QuotesApi.Auth;
+using QuotesApi.Data;
+using QuotesApi.Dtos;
+using QuotesApi.Models;
+using QuotesApi.Repositories;
+using QuotesApi.Services;
 
 namespace Quotes.Tests.Unit;
 
-// Exercises Extensions.ConfigureResilience directly through the exact same
+// Exercises AuthenticationExtensions.ConfigureResilience directly through the exact same
 // AddHttpClient(...).AddResilienceHandler(...) call production code makes -
 // only the primary handler is swapped for a fake one that forces transient
 // failures, so this proves the *real* pipeline retries, not a copy of it.
@@ -33,7 +38,7 @@ public class EntraBackchannelResilienceTests
         services.AddLogging(builder => builder.AddProvider(new CapturingLoggerProvider(logs)));
         services.AddHttpClient("entra-backchannel")
             .ConfigurePrimaryHttpMessageHandler(() => fakeHandler)
-            .AddResilienceHandler("default", Extensions.ConfigureResilience);
+            .AddResilienceHandler("default", AuthenticationExtensions.ConfigureResilience);
 
         await using var provider = services.BuildServiceProvider();
         var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("entra-backchannel");
@@ -60,7 +65,7 @@ public class EntraBackchannelResilienceTests
         services.AddLogging();
         services.AddHttpClient("entra-backchannel")
             .ConfigurePrimaryHttpMessageHandler(() => fakeHandler)
-            .AddResilienceHandler("default", Extensions.ConfigureResilience);
+            .AddResilienceHandler("default", AuthenticationExtensions.ConfigureResilience);
 
         await using var provider = services.BuildServiceProvider();
         var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("entra-backchannel");

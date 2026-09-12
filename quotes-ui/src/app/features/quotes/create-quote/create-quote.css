@@ -1,0 +1,45 @@
+.create-quote {
+  max-width: 34rem;
+  margin-inline: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 1.75rem;
+}
+
+.create-quote h2 {
+  margin-bottom: 0.35rem;
+}
+
+.create-quote h2 + * {
+  margin-top: 1.25rem;
+}
+
+.create-quote form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.create-quote .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.create-quote .error {
+  margin: 0;
+}
+
+.create-quote .banner,
+.create-quote .success {
+  margin: 0;
+}
+
+.create-quote button[type='submit'] {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}

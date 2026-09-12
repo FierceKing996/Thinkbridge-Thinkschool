@@ -1,0 +1,42 @@
+.create-quote-reactive {
+  max-width: 34rem;
+  margin-inline: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 1.75rem;
+}
+
+.create-quote-reactive h2 {
+  margin-bottom: 0.35rem;
+}
+
+.create-quote-reactive h2 + * {
+  margin-top: 1.25rem;
+}
+
+.create-quote-reactive form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.create-quote-reactive .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.create-quote-reactive .error,
+.create-quote-reactive .banner,
+.create-quote-reactive .success {
+  margin: 0;
+}
+
+.create-quote-reactive button[type='submit'] {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}

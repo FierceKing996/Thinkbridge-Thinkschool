@@ -1,0 +1,113 @@
+.collection-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.collection-detail > p {
+  color: var(--ink-soft);
+  padding: 1rem 0;
+}
+
+.collection-detail > p.error { color: var(--danger); }
+
+.collection-detail header {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.collection-detail header h2 {
+  font-size: 1.6rem;
+}
+
+.collection-detail header p {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ink-soft);
+  background: var(--surface-sunken);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.items {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.items li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.items li strong {
+  grid-column: 1;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.items li p {
+  grid-column: 1;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.items li p.hint {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+}
+
+.items li button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 1rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.add label {
+  flex-basis: 100%;
+}
+
+.add select,
+.add input {
+  flex: 1 1 12rem;
+  width: auto;
+}
+
+.add button {
+  flex: 0 0 auto;
+}

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using QuotesApi;
+using QuotesApi.Data;
 
 namespace QuotesApi.Migrations.SqlServer;
 
