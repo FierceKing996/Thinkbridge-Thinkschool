@@ -15,7 +15,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 // each hand-rolling its own HttpErrorResponse/err.status checks (which is
 // what create-quote.ts, create-quote-reactive.ts and quote-detail.ts used to
 // do, duplicated three times).
-export type ApiErrorKind = 'validation' | 'notFound' | 'auth' | 'network' | 'server';
+export type ApiErrorKind = 'validation' | 'notFound' | 'auth' | 'conflict' | 'network' | 'server';
 
 // A plain class (not just an interface) extending Error, not a bare object -
 // so existing `err instanceof Error` style checks (see quote-list.ts) keep
@@ -43,6 +43,7 @@ export class ApiError extends Error {
 
 const GENERIC_VALIDATION_MESSAGE = 'That request could not be completed.';
 const GENERIC_AUTH_MESSAGE = 'You are not authorized to perform this action. Please sign in again.';
+const GENERIC_CONFLICT_MESSAGE = 'That could not be completed because of a conflict with existing data.';
 const GENERIC_NOT_FOUND_MESSAGE = 'The requested item was not found.';
 const GENERIC_NETWORK_MESSAGE = 'Could not reach the server. Check your connection and try again.';
 const GENERIC_SERVER_MESSAGE = 'The server encountered an error. Please try again later.';
@@ -114,6 +115,17 @@ export function mapToApiError(err: unknown): ApiError {
 
   if (err.status === 400) {
     return new ApiError('validation', extractValidationMessage(err), 400);
+  }
+
+  // 409 - so far only produced by POST /api/auth/register (email already
+  // taken). That endpoint returns a plain ProblemDetails body (`Problem(...)`
+  // in AuthController.cs), which is a `detail` string, not an `errors` map -
+  // extractValidationMessage() already handles that shape, it just falls
+  // back to the wrong generic message (validation's) when `detail` is
+  // missing, so that fallback is overridden here.
+  if (err.status === 409) {
+    const message = extractValidationMessage(err);
+    return new ApiError('conflict', message === GENERIC_VALIDATION_MESSAGE ? GENERIC_CONFLICT_MESSAGE : message, 409);
   }
 
   if (err.status >= 500) {

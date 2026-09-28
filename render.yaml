@@ -1,0 +1,70 @@
+# Render Blueprint - the free-tier analog to the Bicep (day1/QuotesApi/infra/)
+# and Terraform (day1/QuotesApi/infra-terraform/) IaC already in this repo,
+# targeting a host that doesn't need the (currently disabled) Azure
+# subscription or any other paid account.
+#
+# Two services, same Dockerfile, same repo - "dev" and "prod" are two live
+# deployments of the same app distinguished by config (their own signing key,
+# their own SQLite data), the same way infra-terraform/environments/*.tfvars
+# already models dev vs. prod as parameters over one config, not two
+# codebases.
+#
+# Setup (one-time, in the Render dashboard - this file can't do the actual
+# account/GitHub connection for you):
+#   1. New -> Blueprint -> connect the FierceKing996/Thinkbridge-Thinkschool
+#      GitHub repo. Render finds this file automatically.
+#   2. For EACH service below, set the `sync: false` env var
+#      (Jwt__SigningKey) in the dashboard - Render will prompt for it during
+#      the Blueprint setup, or Settings -> Environment afterwards. Generate
+#      one per service with:
+#        openssl rand -base64 32
+#      Never reuse the same key across dev and prod, and never commit a real
+#      value for this into the repo (see appsettings.Production.json's own
+#      comment on why it's deliberately absent there too).
+#   3. Both services auto-deploy on push to `main` by default (see
+#      `autoDeploy` below) - flip quotesapi-prod's to false first if you want
+#      dev pushes verified before prod redeploys.
+#
+# Known limitation of the free plan worth knowing before treating either URL
+# as anything but a demo: Render's free web services use an EPHEMERAL
+# filesystem, so the SQLite file under App_Data/ (appsettings.Production.json)
+# is reset on every redeploy and on the free plan's spin-down-when-idle cycle
+# - registered users and quotes do not persist across those. Fine for
+# demoing the auth flow; not fine as real user storage. A persistent disk
+# (paid) or swapping SQLite for a managed Postgres add-on are the two ways
+# off of that, neither done here since both cost money.
+
+services:
+  - type: web
+    name: quotesapi-dev
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Jwt__SigningKey
+        sync: false
+      - key: Environment__Label
+        value: dev
+
+  - type: web
+    name: quotesapi-prod
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Jwt__SigningKey
+        sync: false
+      - key: Environment__Label
+        value: prod

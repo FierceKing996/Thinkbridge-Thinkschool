@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using QuotesApi.Repositories;
+using QuotesApi.Services;
+using Serilog.Context;
 
 namespace QuotesApi.Services.BackgroundJobs;
 
@@ -9,12 +12,29 @@ namespace QuotesApi.Services.BackgroundJobs;
 // notification fan-out.
 public static class QuoteCsvExportJob
 {
-    public static BackgroundWorkItem Create(Guid jobId, string exportDirectory) =>
+    public static BackgroundWorkItem Create(Guid jobId, string exportDirectory, ActivityContext triggeringContext) =>
         async (services, ct) =>
         {
             var statusStore = services.GetRequiredService<ExportJobStatusStore>();
             var quotes = services.GetRequiredService<IQuoteRepository>();
             var logger = services.GetRequiredService<ILogger<QueuedHostedService>>();
+
+            // Day 26: starts as a *child* of the HTTP request that enqueued this job
+            // (triggeringContext, captured in ExportsController before the request's
+            // own Activity ended) rather than a new root - this is what makes the
+            // exported trace show API -> worker as one continuous trace instead of
+            // two spans with unrelated trace IDs. EF Core's own instrumentation then
+            // nests every query this job makes (GetPagedAsync) under it automatically,
+            // completing the API -> worker -> DB chain with no extra code at the DB layer.
+            using var activity = Telemetry.Source.StartActivity(
+                "QuoteCsvExportJob.Process", ActivityKind.Internal, triggeringContext);
+            activity?.SetTag("job.id", jobId);
+
+            // Pushes the same TraceId onto Serilog's LogContext that Program.cs's
+            // request-logging middleware pushed for the original HTTP request - so
+            // grepping logs for one TraceId shows both the "request accepted" line
+            // and this job's "export completed" line, without Jaeger/Grafana running.
+            using var _ = LogContext.PushProperty("TraceId", activity?.TraceId.ToString() ?? "no-trace");
 
             statusStore.Set(jobId, new ExportJobStatus(ExportJobState.Running));
 
@@ -47,6 +67,7 @@ public static class QuoteCsvExportJob
 
                 await File.WriteAllTextAsync(path, csv.ToString(), Encoding.UTF8, ct);
                 statusStore.Set(jobId, new ExportJobStatus(ExportJobState.Completed, FileName: fileName));
+                logger.LogInformation("Quote export {JobId} completed: {FileName}.", jobId, fileName);
             }
             catch (OperationCanceledException)
             {

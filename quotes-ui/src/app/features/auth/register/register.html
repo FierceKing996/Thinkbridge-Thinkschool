@@ -1,0 +1,64 @@
+<section class="login">
+  <h2>Create an account</h2>
+  <p>
+    Already have one?
+    <a routerLink="/login" [queryParams]="{ returnUrl }">Log in</a>.
+  </p>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <form class="login-form" (submit)="onSubmit($event)" novalidate>
+    <label>
+      <span>Email</span>
+      <input
+        type="email"
+        name="email"
+        autocomplete="email"
+        required
+        [value]="email()"
+        (input)="onEmailInput($any($event.target).value)"
+      />
+    </label>
+
+    <label>
+      <span>Password</span>
+      <input
+        type="password"
+        name="password"
+        autocomplete="new-password"
+        required
+        minlength="8"
+        [value]="password()"
+        (input)="onPasswordInput($any($event.target).value)"
+        [attr.aria-invalid]="passwordTooShort() ? true : null"
+        [attr.aria-describedby]="passwordTooShort() ? 'password-hint' : null"
+      />
+      @if (passwordTooShort()) {
+        <span id="password-hint" class="hint" role="alert">At least 8 characters.</span>
+      }
+    </label>
+
+    <label>
+      <span>Confirm password</span>
+      <input
+        type="password"
+        name="confirmPassword"
+        autocomplete="new-password"
+        required
+        [value]="confirmPassword()"
+        (input)="onConfirmPasswordInput($any($event.target).value)"
+        [attr.aria-invalid]="passwordsMismatch() ? true : null"
+        [attr.aria-describedby]="passwordsMismatch() ? 'confirm-hint' : null"
+      />
+      @if (passwordsMismatch()) {
+        <span id="confirm-hint" class="hint" role="alert">Passwords don't match.</span>
+      }
+    </label>
+
+    <button type="submit" [disabled]="loading() || !canSubmit()">
+      {{ loading() ? 'Creating account...' : 'Create account' }}
+    </button>
+  </form>
+</section>

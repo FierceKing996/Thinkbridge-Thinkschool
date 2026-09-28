@@ -89,6 +89,7 @@ Rich entities, not anemic DTOs — invariants live on the aggregate, not scatter
 | POST | `/api/quotes` | `can-edit-quotes` policy (`quotes.write` scope) | 201 + the created `Quote`, or 400 `ValidationProblemDetails` |
 | DELETE | `/api/quotes/{id}` | authenticated + `can-delete-own-quote` (resource-based) | 204, 404, or 403 |
 | GET | `/api/reports/authors` | none | grouped author summary — see §3.6 |
+| POST | `/api/auth/register` | none | 200 + token pair (auto-login on signup), 409 if the email is taken, 400 on a bad email/weak password |
 | POST | `/api/auth/login` | none | 200 + token pair, or 401 |
 | POST | `/api/auth/refresh` | none (bearer refresh token in body) | rotates the refresh token; reuse of an already-rotated token revokes the whole chain (§3.4) |
 | POST | `/api/auth/logout` | none | revokes the given refresh token |
@@ -97,6 +98,7 @@ Rich entities, not anemic DTOs — invariants live on the aggregate, not scatter
 | POST | `/api/collections/{id}/items` | authenticated | write model — see §3.5 |
 | DELETE | `/api/collections/{id}/items/{quoteId}` | authenticated | |
 | GET | `/health` | none | ASP.NET Core health checks |
+| GET | `/api/meta` | none | `{ environment }` — which live deployment this is (see §11); backs the frontend's dev/prod badge |
 
 **Error shapes are not uniform, on purpose and by observation** — this matters a lot for any client:
 - `Results.ValidationProblem(...)` (used on quote/collection creation failures) produces a real `ValidationProblemDetails` JSON body: `{type, title, status, errors: {<key>: [messages]}, traceId}`. For quotes, `errors` always has exactly one key, the literal string `"error"` — never per-field, even though `CreateQuoteRequest` has two fields (see `Extension.cs`: `Results.ValidationProblem(new Dictionary<string,string[]> { ["error"] = [result.Error!] })`).
@@ -118,6 +120,8 @@ Authorization is **policy-based, not role-based** (`can-edit-quotes` → `Requir
 - **Reuse detection**: if a token that's already been rotated is presented again, that's a signal it leaked — the entire token chain descending from it is revoked immediately, forcing a real login. The specific failure reason (`invalid` / `expired-or-revoked` / `reuse-detected`) is logged server-side only; the client always just gets a uniform 401, so a probing attacker can't distinguish the cases.
 
 Password verification uses BCrypt and is wrapped in its own OpenTelemetry span (`verify-password`) — it's pure CPU work invisible to the automatic ASP.NET Core/EF instrumentation, so without a manual span it wouldn't show up in a trace at all.
+
+**Self-registration** (`AuthService.RegisterAsync`, `AuthController.Register`) is the newest piece of this: `POST /api/auth/register` takes an email/password, rejects an obviously-malformed email or a password under 8 characters (400), rejects a duplicate email (409, with a real `detail` message — the one endpoint in this API that doesn't stay deliberately vague, since there's no reuse-detection-style signal to protect here), and otherwise hashes the password with BCrypt, grants the same `quotes.write` scope the seeded demo user has (there's no invite/approval step — "registered" and "can write quotes" are the same thing in this exercise), and immediately issues a token pair via the same `IssueTokenPairAsync` login uses. `User` stays exactly as anemic as before (§10.1) — no new invariants were added to the entity, just a new caller of the existing token-issuing path.
 
 Two users are seeded at startup: `demo@quotesapi.dev` (has `quotes.write`) and `readonly@quotesapi.dev` (no scopes — exists specifically to exercise the 403 path).
 
@@ -176,6 +180,9 @@ Angular **21.2**, standalone components (no `NgModule`s anywhere), **zoneless** 
 - **`QuoteDetail`** — driven by an `id = input<number|null>()` from the parent. Same `switchMap`-over-`toObservable(id)` pattern, for the same reason: selecting a new quote must cancel the previous detail fetch, or a slow response for quote A can land after a fast response for quote B and clobber it.
 - **`CreateQuote`** — built against Angular's **Signal Forms preview API** (`@angular/forms/signals`: `form()`, `schema()`, `required()`/`minLength()`/`maxLength()`/`validate()`, the `FormRoot`/`FormField` directives). Validators mirror the server's exact constraints (author 1–200, text 1–1000) plus a custom trimmed-blank check, because the server trims before validating and the framework's built-in emptiness check doesn't. Full a11y: associated labels, `aria-invalid`/`aria-describedby` gated on touched+invalid, `role="alert"`/`role="status"`, focus moved to the first invalid field on submit (`FieldState.focusBoundControl()`), submit button disabled + relabeled while in flight.
 - **`CreateQuoteReactive`** — a deliberate second implementation of the *same* form using traditional `ReactiveFormsModule`/`FormBuilder`/`Validators`, built as a comparison baseline (not wired into the shipping app — see §4.4). Same validators, same server-error mapping, same a11y bar, but everything Signal Forms gives for free (submitting state, focus-on-invalid, mark-touched-on-submit, and — a real gap the first draft missed — the native `maxlength` attribute) had to be hand-rolled.
+- **`Login`** / **`Register`** — real forms (plain signals + native `(input)`/`(submit)` handlers, no forms module pulled in for two/three fields), not a one-click "log in as demo user" button. `Register` client-side mirrors `AuthService.RegisterAsync`'s own rules (password ≥ 8 chars, confirm-password match) before ever making a request; both share a `returnUrl` convention with `authGuard` (§ below) so a bounce through either page and back lands the user where they originally meant to go, and both narrow a 401/409 `ApiError` into a specific on-screen message rather than the generic one `api-error.ts` defaults to.
+
+`App` (the root shell, `app.ts`) reads `Auth.isAuthenticated` directly to swap the nav between "Sign in"/"Create account" and a "Log out" button (`Auth.logout()` — clears both tokens locally and best-effort revokes the refresh token via `POST /api/auth/logout`), and separately fetches `GET /api/meta` once at startup to render the dev/prod badge next to the wordmark (see §11).
 
 ### 4.3 HTTP layer & interceptor chain
 
@@ -188,8 +195,8 @@ withInterceptors([errorMappingInterceptor, authInterceptor, retryInterceptor])
 Angular's interceptor array is outer→inner on the request path and **inner→outer on the response path** — the first entry sees the response *last*. That ordering is deliberate, not incidental:
 
 1. **`retryInterceptor`** (innermost — sits directly against the backend) — retries **GET requests only**, and only on a genuinely transient failure (network error / status 0, or a 5xx). Never retries a 4xx (a 404 won't start existing because you asked again, and blindly retrying a 401 risks a confusing repeated-auth loop) and never retries a non-GET (a retried POST could double-create a quote). Exponential backoff (250ms, then 500ms).
-2. **`authInterceptor`** (middle) — attaches a bearer token to non-GET, non-`/api/auth/*` requests, fetching/caching it via `Auth.getToken()` (`shareReplay(1)`). Excludes GET (those endpoints are unauthenticated) and `/api/auth/*` itself (excluding only GET here caused a real self-intercepting deadlock — see §7).
-3. **`errorMappingInterceptor`** (outermost) — sees the *final* result only after retry has exhausted its attempts against the real status code. Catches whatever the backend produced and rethrows a typed `ApiError` (`api-error.ts`): a `kind` (`'validation' | 'notFound' | 'auth' | 'network' | 'server'`), the original status if any, and a friendly `message`. This is what lets `retryInterceptor` make retry/no-retry decisions against the real HTTP status — if the order were reversed, it would be deciding based on an already-mapped `ApiError` that's lost the original status code.
+2. **`authInterceptor`** (middle) — attaches a bearer token to non-GET, non-`/api/auth/*` requests, reading it synchronously off `Auth.getToken()`. Excludes GET (those endpoints are unauthenticated) and `/api/auth/*` itself (excluding only GET here caused a real self-intercepting deadlock — see §7). **Also does the refresh-on-401 dance now**: if a request that *did* carry a token comes back 401, it calls `Auth.refreshAccessToken()` (coalesced across concurrent callers via a shared, `shareReplay(1)`'d Observable — a burst of 401s must trigger at most one real `/api/auth/refresh` call, since a second concurrent refresh would look like reuse of an already-rotated token to the server's own reuse-detection and revoke the whole chain), retries the original request once with the new token on success, and on failure calls `Auth.logout()` and rethrows the *original* 401 — the caller's `ApiError`-kind `'auth'` handling is unaffected by the silent refresh attempt underneath it.
+3. **`errorMappingInterceptor`** (outermost) — sees the *final* result only after retry (and now the interceptor-level refresh-and-retry) has exhausted its attempts against the real status code. Catches whatever the backend produced and rethrows a typed `ApiError` (`api-error.ts`): a `kind` (`'validation' | 'notFound' | 'auth' | 'conflict' | 'network' | 'server'` — `'conflict'` added for `POST /api/auth/register`'s 409), the original status if any, and a friendly `message`. This is what lets `retryInterceptor` make retry/no-retry decisions against the real HTTP status — if the order were reversed, it would be deciding based on an already-mapped `ApiError` that's lost the original status code.
 
 Every component that talks to the backend (`CreateQuote`, `QuoteDetail`, `QuoteList`) consumes the typed `ApiError.kind` — none of them hand-roll their own `HttpErrorResponse`/status-code checks any more; that logic used to be duplicated three times and now lives once, at the interceptor boundary.
 
@@ -305,7 +312,7 @@ This is the only flow that also triggers a **second, nested** HTTP call (the log
 
 ### 6.4 What never gets called
 
-`DELETE /api/quotes/{id}`, all three of `/api/collections/*`'s write/read routes, `GET /api/reports/authors`, and `POST /api/auth/refresh`/`logout` are real, tested backend endpoints (§3.3, §3.5, §3.6) with **no frontend caller at all** — there's no delete button, no collections UI, no reports screen, and no refresh-on-401 flow yet (§9, last bullet). `Auth.getToken()`'s cached token is used for the app's whole session; nothing ever calls `/api/auth/refresh` when it (eventually) expires.
+`DELETE /api/quotes/{id}` and `GET /api/reports/authors` are real, tested backend endpoints (§3.3, §3.6) with **no frontend caller at all** — there's no delete button and no reports screen. `POST /api/auth/register`/`login`/`refresh`/`logout` and the collections read/write routes, by contrast, are now all reachable from the UI (`Register`/`Login`, `authInterceptor`'s refresh-on-401, `App.logout()`, and `CollectionDetail`/`CollectionStore` respectively) — this whole subsection used to list all of those as dead code; it doesn't any more.
 
 ## 7. Real bugs found and fixed along the way
 
@@ -330,9 +337,11 @@ npm install
 npx ng serve --port 4200
 ```
 
-Then open `http://localhost:4200`. Seeded demo credentials: `demo@quotesapi.dev` / `correct-horse-battery-staple` (has `quotes.write`; the other seeded user, `readonly@quotesapi.dev`, deliberately has no scopes to exercise the 403 path).
+Then open `http://localhost:4200`. Seeded demo credentials: `demo@quotesapi.dev` / `correct-horse-battery-staple` (has `quotes.write`; the other seeded user, `readonly@quotesapi.dev`, deliberately has no scopes to exercise the 403 path) — or hit `/register` and create your own.
 
 Backend tests: `dotnet test` from `day1/` (the integration suite spins up a real SQL Server container — Docker must be running). Frontend tests: `npx ng test` from `quotes-ui/`.
+
+**Single-container run** (what §11's live deployments actually run — closer to production than the two-terminal setup above): `docker build -t quotesapi . && docker run -p 8080:8080 -e Jwt__SigningKey="$(openssl rand -base64 32)" quotesapi`, then open `http://localhost:8080` — the Angular build is baked into `wwwroot/` inside the image (see the root `Dockerfile`), so there's one process and one origin, no `ng serve`/proxy involved.
 
 ---
 
@@ -341,7 +350,8 @@ Backend tests: `dotnet test` from `day1/` (the integration suite spins up a real
 - No event sourcing for Collections' CQRS split — two query paths over one database, nothing more.
 - No shared frontend/backend type generation — the contract is enforced by hand-verification and the characterization test, not tooling.
 - No retry on non-idempotent requests, ever — a POST failing transiently surfaces as a real failure rather than risking a duplicate write.
-- No client-side token refresh-on-401-retry loop yet — a 401 is currently surfaced to the user as an "auth" error, not silently retried against `/api/auth/refresh`.
+- No email verification or password-reset flow — `POST /api/auth/register` signs a new account in immediately; there's no "confirm your email" step and no "forgot password" path.
+- No persistent storage on the live deployments (§11) — the free host's filesystem is ephemeral, so SQLite (registered users, quotes, everything) resets on redeploy/idle spin-down. Fine for demoing the auth flow, not a real user store.
 
 ---
 
@@ -367,9 +377,10 @@ On the frontend, there is no separate "entity" layer — `QuoteDto` (`quote.ts`)
 Grouped by area; every line corresponds to a real, working endpoint or component cited elsewhere in this document — nothing here is aspirational.
 
 **Authentication & authorization**
-- A user can log in with email + password and receive a short-lived access token and a longer-lived refresh token (`POST /api/auth/login`, §3.4).
-- A refresh token can be exchanged for a new token pair; presenting one that's already been used revokes its entire lineage (`POST /api/auth/refresh`, §3.4) — not currently called by the frontend (§6.4, §9).
-- A refresh token (and by extension a logged-in session) can be explicitly revoked (`POST /api/auth/logout`).
+- A new user can self-register with email + password and is signed in immediately, same token pair as login (`POST /api/auth/register`, §3.4), consumed by `Register` (§4.2). A taken email or a too-weak password is rejected (409 / 400 respectively) with a message the form shows verbatim.
+- A user can log in with email + password and receive a short-lived access token and a longer-lived refresh token (`POST /api/auth/login`, §3.4), consumed by `Login` (§4.2).
+- A refresh token can be exchanged for a new token pair; presenting one that's already been used revokes its entire lineage (`POST /api/auth/refresh`, §3.4) — now called automatically by `authInterceptor` on a 401 from an authenticated request (§4.3), not just by hand.
+- A refresh token (and by extension a logged-in session) can be explicitly revoked (`POST /api/auth/logout`) — called by `Auth.logout()` (§4.2) whenever the "Log out" nav button is used.
 - Write operations are gated by scope (`quotes.write` for creating a quote) or plain authentication (collections), enforced via ASP.NET Core policies, not ad hoc checks in each handler.
 - A user can delete only a quote they themselves created — a resource-based check, not a route-level one (`DELETE /api/quotes/{id}`, §3.4) — not currently called by the frontend.
 
@@ -405,4 +416,16 @@ Each of these is backed by a specific mechanism actually in the code, not a gene
 - **Accessibility** — the create-quote form meets WCAG-style expectations concretely, not just in principle: labeled inputs, `aria-invalid`/`aria-describedby` wired only when actually relevant, `role="alert"`/`role="status"` on dynamic messages, focus management on failed submit, a zero-violation axe-core audit, and a full manual keyboard-only pass (§4.2).
 - **Testability** — the backend is split into four test projects by concern (pure domain, unit, endpoint-level, full-stack integration against a real containerized SQL Server) specifically so a schema or locking bug that SQLite can't reproduce still gets caught (§3.8). The frontend has a dedicated characterization-test file (`quote.contract.spec.ts`) whose fixtures are real bytes captured from the live backend, not invented ones (§4.5) — it exists to fail loudly if the real API contract ever silently drifts.
 - **Maintainability** — invariants live once, on the aggregate (`Quote`, `Collection`), not copy-pasted across every handler that touches them; Collections' write and read paths are fully separated (§3.5) so the read side can be reshaped for a screen without touching the invariant-checked write side; error-mapping logic that used to be duplicated in three frontend components now lives once, at the interceptor boundary (§4.3).
-- **Deployability** — the backend builds as a container image directly from the `.csproj` (Alpine base), with Bicep IaC (`infra/main.bicep`, `infra/resources.bicep`) targeting Azure Container Apps (§3.10); Key Vault and Azure Monitor wiring are both purely additive/optional, so the same code runs unmodified with zero Azure resources provisioned for local dev.
+- **Deployability** — the backend builds as a container image directly from the `.csproj` (Alpine base), with Bicep IaC (`infra/main.bicep`, `infra/resources.bicep`) targeting Azure Container Apps (§3.10) and Terraform (`infra-terraform/`) targeting local Docker as a free stand-in for the same shape; Key Vault and Azure Monitor wiring are both purely additive/optional, so the same code runs unmodified with zero Azure resources provisioned for local dev. A third path — a plain multi-stage `Dockerfile` at the repo root plus a Render Blueprint (`render.yaml`) — is what the two actually-live URLs in §11 run on, chosen specifically because it needs no cloud subscription at all.
+
+---
+
+## 11. Live deployments (dev & prod)
+
+Two Render web services, both built from the same root `Dockerfile` and the same `main` branch, defined declaratively in `render.yaml` (Render's Blueprint format — the free-tier analog to the Bicep/Terraform IaC in §3.10, for a host that doesn't need the Azure subscription this project otherwise targets):
+
+- **`quotesapi-dev`** and **`quotesapi-prod`** — identical images, distinguished only by config: each gets its own `Jwt__SigningKey` (set as a Render secret, never committed — same rule appsettings.Production.json's own comment already states for this key) and its own `Environment__Label` (`dev`/`prod`), which `GET /api/meta` (`Program.cs`) echoes back and `App` (`app.ts`) renders as a small badge next to the wordmark — so the same frontend build visibly identifies which live deployment it's talking to.
+
+**The Dockerfile is a 3-stage build**: an `node:22-alpine` stage runs `ng build --configuration production` for `quotes-ui/`; a `mcr.microsoft.com/dotnet/sdk:10.0-alpine` stage restores and publishes `QuotesApi.csproj`; the final `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` stage copies the publish output plus the Angular build's `browser/` output straight into `wwwroot/` — one image, one process, same same-origin design `Program.cs`'s `UseStaticFiles()`/`MapFallbackToFile("index.html")` was already built around (§4.3's "no CORS config anywhere" observation is why this was the natural shape, not two separate services). A small `entrypoint.sh` resolves the actual bind port from `$PORT` at container start (`http://0.0.0.0:${PORT:-8080}`), since a host-injected port can't be baked in at build time.
+
+**Known limitation, stated plainly**: Render's free plan filesystem is ephemeral, so the SQLite file under `App_Data/` (§3.7) does not survive a redeploy or an idle spin-down — registered users and quotes on both live URLs are wiped periodically. That's an accepted tradeoff for a $0/month deploy, not an oversight; moving either environment onto a persistent disk or a managed Postgres add-on would fix it, at the cost of no longer being free (§9's last bullet).

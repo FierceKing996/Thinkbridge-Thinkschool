@@ -53,6 +53,28 @@
   transform: translateY(0.35rem);
 }
 
+/* GET /api/meta's environment label (app.ts) - which live deployment this
+   build is talking to. Amber for anything that isn't prod (dev, or any
+   future third environment), a quieter tone for prod - a mislabeled prod
+   badge should never look alarming, a non-prod one should be hard to miss. */
+.env-badge {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  color: #7a4a00;
+  background: #ffdb99;
+  border: 1px solid #e6a83d;
+}
+
+.env-badge--prod {
+  color: var(--ink-soft);
+  background: var(--surface-sunken);
+  border-color: var(--line);
+}
+
 .site-header nav {
   display: flex;
   gap: 0.35rem;
@@ -78,6 +100,26 @@
 .site-header nav a.is-active {
   background: var(--accent);
   color: #fff;
+}
+
+/* Logout is a <button> (it performs an action, not a navigation), styled to
+   sit flush with the surrounding <a> nav links. */
+.site-header nav .nav-logout {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.site-header nav .nav-logout:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
 }
 
 /* --- Main ------------------------------------------------------------- */

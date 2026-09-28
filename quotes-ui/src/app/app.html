@@ -4,12 +4,20 @@
       <span class="wordmark__glyph" aria-hidden="true">&ldquo;</span>
       <h1>Quotes</h1>
     </a>
+    @if (environmentLabel(); as label) {
+      <span class="env-badge" [class.env-badge--prod]="label === 'prod'">{{ label }}</span>
+    }
     <nav>
       <a routerLink="/quotes" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">
         Browse
       </a>
       <a routerLink="/quotes/new" routerLinkActive="is-active">Add a quote</a>
-      <a routerLink="/login" routerLinkActive="is-active">Sign in</a>
+      @if (isAuthenticated()) {
+        <button type="button" class="nav-logout" (click)="logout()">Log out</button>
+      } @else {
+        <a routerLink="/login" routerLinkActive="is-active">Sign in</a>
+        <a routerLink="/register" routerLinkActive="is-active">Create account</a>
+      }
     </nav>
   </div>
 </header>

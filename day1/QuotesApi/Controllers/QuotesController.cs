@@ -10,6 +10,7 @@ using QuotesApi.Services;
 namespace QuotesApi.Controllers;
 
 [ApiController]
+[Asp.Versioning.ApiVersion("1.0")]
 [Route("api/quotes")]
 public class QuotesController : ApiControllerBase
 {

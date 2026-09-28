@@ -45,6 +45,52 @@ public class AuthService(
         return await IssueTokenPairAsync(user, ct);
     }
 
+    // Self-service signup. Deliberately minimal validation here, not a rich
+    // domain factory the way Quote.Create() is - see User.cs's own comment on
+    // why User stays anemic for this exercise. Returns a RegisterResult
+    // (Tokens xor Error) rather than throwing, same reasoning as
+    // QuoteCreationResult: "the email is already registered" is an expected,
+    // routine outcome, not an exceptional one.
+    public async Task<RegisterResult> RegisterAsync(string email, string password, CancellationToken ct)
+    {
+        email = email.Trim();
+
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        {
+            return RegisterResult.Fail("invalid-email");
+        }
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        {
+            return RegisterResult.Fail("weak-password");
+        }
+
+        var existing = await users.GetByEmailAsync(email, ct);
+        if (existing is not null)
+        {
+            return RegisterResult.Fail("email-taken");
+        }
+
+        var user = new User
+        {
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            // Granted the same scope the seeded demo user has, so a freshly
+            // registered account can actually use the app it just signed up
+            // for - not land in the seeded readonly@quotesapi.dev's
+            // scope-less, 403-only role. There's no invite/approval flow in
+            // this exercise, so "registered" and "can write quotes" are the
+            // same thing.
+            Scopes = "quotes.write"
+        };
+
+        await users.AddAsync(user, ct);
+        await users.SaveChangesAsync(ct);
+
+        var tokens = await IssueTokenPairAsync(user, ct);
+        return RegisterResult.Success(tokens);
+    }
+
     public async Task<RefreshResult> RefreshAsync(string rawRefreshToken, CancellationToken ct)
     {
         var hash = tokenService.HashRefreshToken(rawRefreshToken);

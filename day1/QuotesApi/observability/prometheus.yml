@@ -1,0 +1,12 @@
+# Day 26: scrapes QuotesApi's own /metrics endpoint (app.MapPrometheusScrapingEndpoint()
+# in Program.cs). host.docker.internal resolves to the host machine from inside the
+# Prometheus container, so this works whether QuotesApi runs via `dotnet run` on the
+# host or as its own container on the same compose network (in the latter case, swap
+# the target for the service name, e.g. "quotesapi:8080").
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: quotesapi
+    static_configs:
+      - targets: ["host.docker.internal:5062"]

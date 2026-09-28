@@ -1,15 +1,41 @@
 <section class="login">
   <h2>Log in</h2>
   <p>
-    This demo signs you in as the seeded <code>demo@quotesapi.dev</code> user
-    (scope <code>quotes.write</code>), which POST /api/quotes requires.
+    New here?
+    <a routerLink="/register" [queryParams]="{ returnUrl }">Create an account</a>.
   </p>
 
   @if (error(); as message) {
-    <p class="error">{{ message }}</p>
+    <p class="error" role="alert">{{ message }}</p>
   }
 
-  <button type="button" (click)="logIn()" [disabled]="loading()">
-    {{ loading() ? 'Logging in...' : 'Log in as demo user' }}
-  </button>
+  <form class="login-form" (submit)="onSubmit($event)" novalidate>
+    <label>
+      <span>Email</span>
+      <input
+        type="email"
+        name="email"
+        autocomplete="email"
+        required
+        [value]="email()"
+        (input)="onEmailInput($any($event.target).value)"
+      />
+    </label>
+
+    <label>
+      <span>Password</span>
+      <input
+        type="password"
+        name="password"
+        autocomplete="current-password"
+        required
+        [value]="password()"
+        (input)="onPasswordInput($any($event.target).value)"
+      />
+    </label>
+
+    <button type="submit" [disabled]="loading() || !canSubmit()">
+      {{ loading() ? 'Logging in...' : 'Log in' }}
+    </button>
+  </form>
 </section>

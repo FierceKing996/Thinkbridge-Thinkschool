@@ -1,3 +1,0 @@
-# Keeps the folder in git. Populated with the built Angular UI by
-# publish-monsterasp.ps1; empty otherwise. The API needs this directory
-# to exist at startup (WebApplication.CreateBuilder resolves the web root).

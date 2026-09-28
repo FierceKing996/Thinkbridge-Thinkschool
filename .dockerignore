@@ -1,0 +1,19 @@
+# Keeps the build context (everything sent to the Docker daemon before a
+# single instruction runs) small and reproducible - none of this should
+# influence the image, and bin/obj/node_modules in particular are large
+# enough to make every `docker build` slow if included.
+**/bin/
+**/obj/
+**/node_modules/
+**/.angular/
+quotes-ui/dist/
+day1/QuotesApi/wwwroot/*
+!day1/QuotesApi/wwwroot/.gitkeep
+day1/QuotesApi/App_Data/
+day1/QuotesApi/quotes.db
+day1/QuotesApi/infra-terraform/.terraform/
+day1/QuotesApi/infra-terraform/terraform.tfstate*
+**/*.user
+.git/
+.vscode/
+.idea/

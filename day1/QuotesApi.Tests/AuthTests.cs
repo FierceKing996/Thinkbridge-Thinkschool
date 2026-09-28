@@ -16,6 +16,45 @@ public class AuthTests : IClassFixture<QuotesApiFactory>
     }
 
     [Fact]
+    public async Task Register_NewEmail_ReturnsTokenPairAndCanLogInAgainAfterwards()
+    {
+        var client = _factory.CreateClient();
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register", new RegisterRequest("new-user@example.com", "a-strong-password"));
+        registerResponse.EnsureSuccessStatusCode();
+        var tokens = await registerResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        Assert.NotNull(tokens?.AccessToken);
+        Assert.NotNull(tokens?.RefreshToken);
+
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login", new LoginRequest("new-user@example.com", "a-strong-password"));
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_DuplicateEmail_Returns409()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register", new RegisterRequest("demo@quotesapi.dev", "a-strong-password"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_WeakPassword_Returns400()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register", new RegisterRequest("weak-password-user@example.com", "short"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task RefreshTokenReuse_RevokesTheEntireChain()
     {
         var client = _factory.CreateClient();

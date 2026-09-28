@@ -5,6 +5,7 @@ using QuotesApi.Repositories;
 namespace QuotesApi.Controllers;
 
 [ApiController]
+[Asp.Versioning.ApiVersion("1.0")]
 [Route("api/reports")]
 public class ReportsController : ControllerBase
 {

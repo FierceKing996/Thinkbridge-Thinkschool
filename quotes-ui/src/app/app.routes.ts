@@ -55,6 +55,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login/login').then((m) => m.Login),
   },
   {
+    path: 'register',
+    loadComponent: () => import('./features/auth/register/register').then((m) => m.Register),
+  },
+  {
     // Unknown URL -> back to the list rather than a dead end. redirectTo (not
     // a wildcard component) keeps the address bar honest.
     path: '**',

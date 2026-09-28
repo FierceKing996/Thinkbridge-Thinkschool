@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.IdentityModel.Tokens;
 using Polly;
+using Polly.RateLimiting;
 using QuotesApi.Services;
 
 namespace QuotesApi.Auth;
@@ -123,16 +124,23 @@ public static class AuthenticationExtensions
     // configuration production code registers, instead of a hand-copied
     // duplicate that could silently drift from what actually runs.
     //
-    // Defaults per spec: 3 retries, exponential backoff with jitter (spreads
-    // retries out so a fleet of instances doesn't all hammer Entra at the
-    // same instant after a shared blip); circuit opens once 50% of calls in
-    // a rolling 30s window fail; a 10s ceiling on the whole call including
-    // every retry, so a hung request can't block a token validation forever.
-    // No custom OnRetry/logging callback needed - AddResilienceHandler wires
-    // its own ILogger-based telemetry automatically, which is what actually
-    // emits the retry log lines.
+    // Day 22: four stages, outermost first. Bulkhead caps total concurrent
+    // in-flight calls (including their retries) into the whole pipeline below
+    // it - a slow/stuck Entra backchannel can only ever tie up 10 concurrent
+    // requests plus 5 queued, never the app's entire HttpClient connection pool
+    // or thread pool, however many token validations are in flight at once.
+    // Retry then wraps circuit breaker then per-attempt timeout, same order as
+    // before: 3 retries, exponential backoff with jitter (spreads retries out so
+    // a fleet of instances doesn't all hammer Entra at the same instant after a
+    // shared blip); circuit opens once 50% of calls in a rolling 30s window fail;
+    // a 10s ceiling on each individual attempt, so one hung attempt can't block a
+    // token validation forever. No custom OnRetry/logging callback needed -
+    // AddResilienceHandler wires its own ILogger-based telemetry automatically,
+    // which is what actually emits the retry log lines.
     internal static void ConfigureResilience(ResiliencePipelineBuilder<HttpResponseMessage> builder)
     {
+        builder.AddConcurrencyLimiter(permitLimit: 10, queueLimit: 5);
+
         builder.AddRetry(new HttpRetryStrategyOptions
         {
             MaxRetryAttempts = 3,

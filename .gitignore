@@ -1,5 +1,6 @@
 bin/
 obj/
+*.db
 *.db-shm
 *.db-wal
 TestResults/
@@ -10,3 +11,22 @@ day1/QuotesApi/wwwroot/*
 !day1/QuotesApi/wwwroot/.gitkeep
 day1/QuotesApi/publish/
 day1/QuotesApi/quotesapi-monsterasp.zip
+
+# Runtime data (App_Data/quotes.db is also covered by *.db above, but the
+# exports/ CSVs under it are their own generated artifact - see
+# QuoteCsvExportJob.cs) and Angular build output - never source, always
+# regenerated (locally via `ng build`, or inside the root Dockerfile for a
+# real deploy).
+day1/QuotesApi/App_Data/
+quotes-ui/dist/
+quotes-ui/.angular/
+
+# Terraform (day1/QuotesApi/infra-terraform/) - .terraform/ is a huge,
+# machine-specific provider plugin cache (re-created by `terraform init`),
+# and state/plan files can and do contain real values passed in at apply
+# time (e.g. MSSQL_SA_PASSWORD baked into the docker resource's env list) -
+# never committed, same reason a real Jwt__SigningKey never is.
+day1/QuotesApi/infra-terraform/.terraform/
+day1/QuotesApi/infra-terraform/terraform.tfstate
+day1/QuotesApi/infra-terraform/terraform.tfstate.backup
+day1/QuotesApi/infra-terraform/tfplan

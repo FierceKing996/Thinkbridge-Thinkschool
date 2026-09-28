@@ -75,6 +75,68 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RegisterAsync_NewEmail_CreatesUserAndReturnsTokenPair()
+    {
+        _users.GetByEmailAsync("new@example.com", Arg.Any<CancellationToken>()).Returns((User?)null);
+        _tokenService.CreateAccessToken(Arg.Any<User>()).Returns(("access-token-x", 900));
+        _tokenService.CreateRefreshToken().Returns("raw-refresh-token");
+        _tokenService.HashRefreshToken("raw-refresh-token").Returns("hashed-refresh-token");
+        _clock.UtcNow.Returns(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var sut = MakeSut();
+
+        var result = await sut.RegisterAsync("new@example.com", "a-strong-password", CancellationToken.None);
+
+        result.Succeeded.Should().BeTrue();
+        result.Tokens!.AccessToken.Should().Be("access-token-x");
+        result.Tokens.RefreshToken.Should().Be("raw-refresh-token");
+        await _users.Received(1).AddAsync(
+            Arg.Is<User>(u => u.Email == "new@example.com" && u.Scopes == "quotes.write"),
+            Arg.Any<CancellationToken>());
+        await _users.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RegisterAsync_EmailAlreadyRegistered_ReturnsFailureAndDoesNotCreateUser()
+    {
+        var existing = MakeUser();
+        _users.GetByEmailAsync(existing.Email, Arg.Any<CancellationToken>()).Returns(existing);
+        var sut = MakeSut();
+
+        var result = await sut.RegisterAsync(existing.Email, "a-strong-password", CancellationToken.None);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be("email-taken");
+        await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("")]
+    public async Task RegisterAsync_InvalidEmail_ReturnsFailureAndDoesNotCreateUser(string email)
+    {
+        var sut = MakeSut();
+
+        var result = await sut.RegisterAsync(email, "a-strong-password", CancellationToken.None);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be("invalid-email");
+        await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RegisterAsync_PasswordTooShort_ReturnsFailureAndDoesNotCreateUser()
+    {
+        _users.GetByEmailAsync("new@example.com", Arg.Any<CancellationToken>()).Returns((User?)null);
+        var sut = MakeSut();
+
+        var result = await sut.RegisterAsync("new@example.com", "short", CancellationToken.None);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be("weak-password");
+        await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RefreshAsync_TokenNotFound_ReturnsFailure()
     {
         _tokenService.HashRefreshToken("unknown-token").Returns("unknown-hash");

@@ -38,22 +38,30 @@ describe('Login', () => {
 
   afterEach(() => httpMock.verify());
 
-  function clickLogIn(): void {
-    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+  function setInput(selector: string, value: string): void {
+    const input = fixture.nativeElement.querySelector(selector) as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  }
+
+  function fillAndSubmit(email: string, password: string): void {
+    setInput('input[name="email"]', email);
+    setInput('input[name="password"]', password);
+    fixture.detectChanges();
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
     fixture.detectChanges();
   }
 
-  it('logs in then navigates to the returnUrl from the query string', () => {
+  it('logs in with the entered credentials and navigates to the returnUrl from the query string', () => {
     configure('/quotes/new');
     const navSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
-    clickLogIn();
+    fillAndSubmit('user@example.com', 'correct-password');
 
-    httpMock.expectOne('/api/auth/login').flush({
-      access_token: 't',
-      refresh_token: 'r',
-      expires_in: 900,
-    });
+    const req = httpMock.expectOne('/api/auth/login');
+    expect(req.request.body).toEqual({ email: 'user@example.com', password: 'correct-password' });
+    req.flush({ access_token: 't', refresh_token: 'r', expires_in: 900 });
 
     expect(TestBed.inject(Auth).isAuthenticated()).toBe(true);
     expect(navSpy).toHaveBeenCalledWith('/quotes/new');
@@ -63,7 +71,7 @@ describe('Login', () => {
     configure(null);
     const navSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
-    clickLogIn();
+    fillAndSubmit('user@example.com', 'correct-password');
     httpMock.expectOne('/api/auth/login').flush({
       access_token: 't',
       refresh_token: 'r',
@@ -73,18 +81,34 @@ describe('Login', () => {
     expect(navSpy).toHaveBeenCalledWith('/quotes');
   });
 
-  it('shows an error and does not navigate when login fails', () => {
+  it('does not submit while email or password is empty', () => {
+    configure(null);
+
+    // Only email filled in - the submit button stays disabled and the form
+    // handler bails out even if a submit event fires anyway.
+    setInput('input[name="email"]', 'user@example.com');
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+
+    httpMock.expectNone('/api/auth/login');
+  });
+
+  it('shows a specific message and does not navigate when login fails with 401', () => {
     configure('/quotes/new');
     const navSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
-    clickLogIn();
+    fillAndSubmit('user@example.com', 'wrong-password');
     httpMock
       .expectOne('/api/auth/login')
       .flush(null, { status: 401, statusText: 'Unauthorized' });
     fixture.detectChanges();
 
     expect(navSpy).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.error()).not.toBeNull();
+    expect(fixture.componentInstance.error()).toBe('Incorrect email or password.');
     expect(fixture.nativeElement.querySelector('.error')).toBeTruthy();
   });
 });
