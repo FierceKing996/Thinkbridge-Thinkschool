@@ -64,6 +64,15 @@ services:
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: root
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      # The vault CLI (used by the healthcheck below, and by `docker exec`
+      # commands run against this container) defaults to
+      # https://127.0.0.1:8200 when VAULT_ADDR isn't set, which fails
+      # instantly against a plain-HTTP dev-mode listener - not a real
+      # problem (the server itself is fine, per its own logs), but it makes
+      # `docker compose ps` report this container unhealthy and every
+      # `vault status`/`vault kv put` invocated without an explicit
+      # -address flag fail the same way.
+      VAULT_ADDR: "http://127.0.0.1:8200"
     cap_add:
       - IPC_LOCK
     healthcheck:

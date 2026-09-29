@@ -42,8 +42,17 @@ public static class VaultConfigurationExtensions
             .ReadSecretAsync(path: secretPath, mountPoint: mountPoint)
             .GetAwaiter().GetResult();
 
+        // Stored in Vault using the env-var convention (Jwt__SigningKey, matching
+        // DAY25_IDENTITY.md's own `vault kv put` example) so it reads the same way
+        // whether it ends up delivered via Vault or a real env var. But
+        // AddInMemoryCollection is not EnvironmentVariablesConfigurationProvider -
+        // it stores whatever key it's given literally, it does NOT translate "__"
+        // to ":" the way the env-var provider does. Without this translation,
+        // config.GetSection("Jwt")["SigningKey"] would never find a key literally
+        // named "Jwt__SigningKey", and JwtOptions.SigningKey (required) would be
+        // null - not caught until AddJwtAuth throws at startup.
         var values = secret.Data.Data
-            .Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value?.ToString()));
+            .Select(kv => new KeyValuePair<string, string?>(kv.Key.Replace("__", ":"), kv.Value?.ToString()));
 
         builder.AddInMemoryCollection(values);
         return builder;
